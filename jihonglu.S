@@ -1,24 +1,44 @@
-
+.set DEST, 0x50200000
 .global main
 main:
+    li s0, 1
+    li s1, 201
+    la s2, DEST
+    addi s2, s2, 1
+loop_2:
+    bge s0, s1, end
 
-// TODO: [p0-task1] Add your code here!
+    add a0, s0, zero
+    jal ra, is_prime
+    sb a0, 0(s2)
 
-.set DEST, 0x50000000
+    addi s0, s0, 1
+    addi s2, s2, 1
 
-    li t0, 0
-    li t1, 1
-    li t2, 49
-
-loop:
-    blt t2, zero, end
-    add t0, t0, t1
-    addi t1, t1, 1
-    addi t2, t2, -1
-    jal zero, loop
-
-end:
-    la t4, DEST
-    sw t0, 0(t4)
-
+    jal zero, loop_2
     
+end:
+    addi zero, zero, 0
+    jal zero, end
+
+is_prime:
+    li t0, 1
+    beq a0, t0, end_not_prime
+    li t0, 2
+
+loop_1:
+    bge t0, a0, end_prime
+
+    rem t1, a0, t0
+    beq t1, zero, end_not_prime
+
+    addi t0, t0, 1
+    jal zero, loop_1
+
+end_not_prime:
+    li a0, 0
+    jal zero, end_func
+end_prime:
+    li a0, 1
+end_func:
+    jalr x0, ra, 0
