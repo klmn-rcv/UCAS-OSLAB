@@ -9,7 +9,7 @@ PROJECT_IDX	= 0
 # -----------------------------------------------------------------------
 
 SHELL		= /bin/sh
-DIR_OSLAB	= $(HOME)/OSLab-RISC-V
+DIR_OSLAB	= $(HOME)/oslab/OSLab-RISC-V
 DIR_QEMU	= $(DIR_OSLAB)/qemu
 
 # -----------------------------------------------------------------------
@@ -41,7 +41,7 @@ USER_ENTRYPOINT			= 0x50000000
 # UCAS-OS User Source Files
 # -----------------------------------------------------------------------
 
-SRC_USER	= test.S
+SRC_USER	= jihonglu.S
 ELF_USER	= $(patsubst %.S, %, $(SRC_USER))
 
 # -----------------------------------------------------------------------
