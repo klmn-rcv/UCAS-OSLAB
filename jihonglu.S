@@ -4,7 +4,7 @@ main:
 
 // TODO: [p0-task1] Add your code here!
 
-.set DEST, 0x50000000
+.set DEST, 0x50200000
 
     li t0, 0
     li t1, 1
@@ -20,5 +20,3 @@ loop:
 end:
     la t4, DEST
     sw t0, 0(t4)
-
-    
