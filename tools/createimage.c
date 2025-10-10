@@ -12,7 +12,8 @@
 #define SECTOR_SIZE 512
 #define BOOT_LOADER_SIG_OFFSET 0x1fe
 #define OS_SIZE_LOC (BOOT_LOADER_SIG_OFFSET - 2)
-#define APP_NUM_LOC (BOOT_LOADER_SIG_OFFSET - 4)
+#define TASK_NUM_LOC (BOOT_LOADER_SIG_OFFSET - 4)
+#define TASK_INFO_OFFSET_LOC (BOOT_LOADER_SIG_OFFSET - 8)
 #define BOOT_LOADER_SIG_1 0x55
 #define BOOT_LOADER_SIG_2 0xaa
 
@@ -20,7 +21,10 @@
 
 /* TODO: [p1-task4] design your own task_info_t */
 typedef struct {
-
+    uint16_t taskid;
+    char taskname[64];
+    uint32_t offset;
+    uint32_t filesz;
 } task_info_t;
 
 #define TASK_MAXNUM 16
@@ -43,7 +47,7 @@ static uint32_t get_memsz(Elf64_Phdr phdr);
 static void write_segment(Elf64_Phdr phdr, FILE *fp, FILE *img, int *phyaddr);
 static void write_padding(FILE *img, int *phyaddr, int new_phyaddr);
 static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
-                           short tasknum, FILE *img);
+                           short tasknum, FILE *img, int phyaddr);
 
 int main(int argc, char **argv)
 {
@@ -96,6 +100,12 @@ static void create_image(int nfiles, char *files[])
 
         int taskidx = fidx - 2;
 
+        if (taskidx >= 0) {
+            taskinfo[taskidx].taskid = (uint16_t)taskidx;
+            strcpy(taskinfo[taskidx].taskname, *files);
+            taskinfo[taskidx].offset = phyaddr;
+        }
+
         /* open input file */
         fp = fopen(*files, "r");
         assert(fp != NULL);
@@ -128,15 +138,22 @@ static void create_image(int nfiles, char *files[])
          *  occupies the same number of sectors
          * 2. [p1-task4] only padding bootblock is allowed!
          */
-        // if (strcmp(*files, "bootblock") == 0) {
-        //     write_padding(img, &phyaddr, SECTOR_SIZE);
-        // }
-        write_padding(img, &phyaddr, (15 * fidx + 1) * SECTOR_SIZE);        
+        
+        //// p1-task3:
+        // write_padding(img, &phyaddr, (15 * fidx + 1) * SECTOR_SIZE);
 
+        // p1-task4:
+        if (strcmp(*files, "bootblock") == 0) {
+            write_padding(img, &phyaddr, SECTOR_SIZE);
+        }
+        else if (taskidx >= 0) {
+            taskinfo[taskidx].filesz = phyaddr - taskinfo[taskidx].offset;
+        }
+        
         fclose(fp);
         files++;
     }
-    write_img_info(nbytes_kernel, taskinfo, tasknum, img);
+    write_img_info(nbytes_kernel, taskinfo, tasknum, img, phyaddr);
 
     fclose(img);
 }
@@ -213,7 +230,7 @@ static void write_padding(FILE *img, int *phyaddr, int new_phyaddr)
 }
 
 static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
-                           short tasknum, FILE * img)
+                           short tasknum, FILE * img, int phyaddr)
 {
     // TODO: [p1-task3] & [p1-task4] write image info to some certain places
     // NOTE: os size, infomation about app-info sector(s) ...
@@ -222,9 +239,15 @@ static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
     fseek(img, OS_SIZE_LOC, SEEK_SET);
     fputc(num_kernel_sectors & 0xff, img);
     fputc((num_kernel_sectors >> 8) & 0xff, img);
-    fseek(img, APP_NUM_LOC, SEEK_SET);
+    fseek(img, TASK_NUM_LOC, SEEK_SET);
     fputc(tasknum & 0xff, img);
     fputc((tasknum >> 8) & 0xff, img);
+    fseek(img, TASK_INFO_OFFSET_LOC, SEEK_SET);
+    fwrite(&phyaddr, 4, 1, img);
+
+    // p1-task4:
+    fseek(img, phyaddr, SEEK_SET);
+    fwrite(taskinfo, sizeof(task_info_t), tasknum, img);
 }
 
 /* print an error message and exit */

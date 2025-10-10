@@ -7,7 +7,6 @@
 #include <type.h>
 
 #define VERSION_BUF 50
-#define APP_NUM_LOC 0x502001fa
 
 int version = 2; // version must between 0 and 9
 char buf[VERSION_BUF];
@@ -37,17 +36,25 @@ static void init_jmptab(void)
     jmptab[SD_READ]         = (long (*)())sd_read;
 }
 
-static void init_task_info(void)
+static void init_task_info(uint16_t tasknum, uint32_t task_info_offset)
 {
     // TODO: [p1-task4] Init 'tasks' array via reading app-info sector
     // NOTE: You need to get some related arguments from bootblock first
+    uint32_t task_info_size = sizeof(task_info_t) * tasknum;
+    unsigned begin_sector = NBYTES2SEC(task_info_offset) - 1;
+    unsigned end_sector = NBYTES2SEC(task_info_offset + task_info_size) - 1;
+    unsigned num_sector = end_sector - begin_sector + 1;
+    unsigned mem_address = TASK_MEM_BASE + TASK_SIZE * tasknum;
+    bios_sd_read(mem_address, num_sector, begin_sector);
+    memcpy((uint8_t *)mem_address, (uint8_t *)(mem_address + (task_info_offset % SECTOR_SIZE)), task_info_size);
+    memcpy((uint8_t *)tasks, (uint8_t *)mem_address, task_info_size);
 }
 
 /************************************************************/
 /* Do not touch this comment. Reserved for future projects. */
 /************************************************************/
 
-int main(void)
+int main(uint16_t tasknum, uint32_t task_info_offset)
 {
     // Check whether .bss section is set to zero
     int check = bss_check();
@@ -56,7 +63,7 @@ int main(void)
     init_jmptab();
 
     // Init task information (〃'▽'〃)
-    init_task_info();
+    init_task_info(tasknum, task_info_offset);
 
     // Output 'Hello OS!', bss check result and OS version
     char output_str[] = "bss check: _ version: _\n\r";
@@ -90,45 +97,37 @@ int main(void)
         if (ch != -1) {
             bios_putchar(ch);
             if (ch == '\n' || ch == '\r') {
-                int input_valid = 1;
-                int id = 0;
-                for(int i = 0; i < input_p; i++) {
-                    if('0' > input_buf[i] || '9' < input_buf[i]) {
-                        input_valid = 0;
-                        bios_putstr("Invalid input. Please input task ID...\n\r");
-                        break;
-                    }
-                    id = id * 10 + (input_buf[i] - '0');
-                    if(id < 0 || id > 0xffff) {
-                        input_valid = 0;
-                        bios_putstr("Invalid ID. Please input correct task ID...\n\r");
-                        break;
-                    }
+
+                input_buf[input_p] = '\0';
+                int file_exist = 0;
+                for(uint16_t i = 0; i < tasknum; i++) {
+                    if(strcmp(input_buf, tasks[i].taskname) == 0)
+                        file_exist = 1;
                 }
-                if(input_valid) {
-                    if(id > 0 && id <= *((uint16_t *)APP_NUM_LOC)) {
-                        uint64_t entrypoint = load_task_img(id);
-                        asm volatile(
-                            "addi sp, sp, -16\n\t"
-                            "sd ra, 8(sp)\n\t"
-                            "sd fp, 0(sp)\n\t"
-                            "add fp, sp, zero\n\t"
-                            "jalr ra, %0\n\t"
-                            "ld fp, 0(sp)\n\t"
-                            "ld ra, 8(sp)\n\t"
-                            "addi sp, sp, 16\n\t"
-                            : 
-                            : "r" (entrypoint)
-                            : "memory"
-                        );
-                    }
-                    else if(input_p > 0) {
-                        bios_putstr("ID out of range. Please input correct task ID...\n\r");
-                    }
-                    else {
-                        bios_putstr("Please input task ID...\n\r");
-                    }
+
+                if(file_exist) {
+                    uint64_t entrypoint = load_task_img(input_buf, tasks, tasknum);
+                    asm volatile(
+                        "addi sp, sp, -16\n\t"
+                        "sd ra, 8(sp)\n\t"
+                        "sd fp, 0(sp)\n\t"
+                        "add fp, sp, zero\n\t"
+                        "jalr ra, %0\n\t"
+                        "ld fp, 0(sp)\n\t"
+                        "ld ra, 8(sp)\n\t"
+                        "addi sp, sp, 16\n\t"
+                        : 
+                        : "r" (entrypoint)
+                        : "memory"
+                    );
                 }
+                else if(input_p > 0) {
+                    bios_putstr("File does not exist. Please input correct file name...\n\r");
+                }
+                else {
+                    bios_putstr("Please input file name...\n\r");
+                }
+                
                 input_p = 0;
                 continue;
             }
