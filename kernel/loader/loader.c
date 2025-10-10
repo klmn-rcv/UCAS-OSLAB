@@ -11,5 +11,9 @@ uint64_t load_task_img(int taskid)
      * 2. [p1-task4] load task via task name, thus the arg should be 'char *taskname'
      */
 
-    return 0;
+    uint64_t entrypoint = (taskid - 1) * 0x10000 + 0x52000000;
+    unsigned int block_id = 15 * taskid + 1;
+    bios_sd_read(entrypoint, 15, block_id);
+
+    return entrypoint;
 }

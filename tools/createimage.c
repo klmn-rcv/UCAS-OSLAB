@@ -12,6 +12,7 @@
 #define SECTOR_SIZE 512
 #define BOOT_LOADER_SIG_OFFSET 0x1fe
 #define OS_SIZE_LOC (BOOT_LOADER_SIG_OFFSET - 2)
+#define APP_NUM_LOC (BOOT_LOADER_SIG_OFFSET - 4)
 #define BOOT_LOADER_SIG_1 0x55
 #define BOOT_LOADER_SIG_2 0xaa
 
@@ -127,9 +128,10 @@ static void create_image(int nfiles, char *files[])
          *  occupies the same number of sectors
          * 2. [p1-task4] only padding bootblock is allowed!
          */
-        if (strcmp(*files, "bootblock") == 0) {
-            write_padding(img, &phyaddr, SECTOR_SIZE);
-        }
+        // if (strcmp(*files, "bootblock") == 0) {
+        //     write_padding(img, &phyaddr, SECTOR_SIZE);
+        // }
+        write_padding(img, &phyaddr, (15 * fidx + 1) * SECTOR_SIZE);        
 
         fclose(fp);
         files++;
@@ -215,6 +217,14 @@ static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
 {
     // TODO: [p1-task3] & [p1-task4] write image info to some certain places
     // NOTE: os size, infomation about app-info sector(s) ...
+    
+    uint16_t num_kernel_sectors = (uint16_t)NBYTES2SEC(nbytes_kernel);
+    fseek(img, OS_SIZE_LOC, SEEK_SET);
+    fputc(num_kernel_sectors & 0xff, img);
+    fputc((num_kernel_sectors >> 8) & 0xff, img);
+    fseek(img, APP_NUM_LOC, SEEK_SET);
+    fputc(tasknum & 0xff, img);
+    fputc((tasknum >> 8) & 0xff, img);
 }
 
 /* print an error message and exit */

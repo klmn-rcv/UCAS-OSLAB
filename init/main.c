@@ -7,6 +7,7 @@
 #include <type.h>
 
 #define VERSION_BUF 50
+#define APP_NUM_LOC 0x502001fa
 
 int version = 2; // version must between 0 and 9
 char buf[VERSION_BUF];
@@ -76,8 +77,66 @@ int main(void)
     bios_putstr("Hello OS!\n\r");
     bios_putstr(buf);
 
+    char input_buf[1024];
+    int input_p = 0;
+
     // TODO: Load tasks by either task id [p1-task3] or task name [p1-task4],
     //   and then execute them.
+
+    bios_putstr("Please input task ID...\n\r");
+
+    while (1) {
+        int ch = bios_getchar();
+        if (ch != -1) {
+            bios_putchar(ch);
+            if (ch == '\n' || ch == '\r') {
+                int input_valid = 1;
+                int id = 0;
+                for(int i = 0; i < input_p; i++) {
+                    if('0' > input_buf[i] || '9' < input_buf[i]) {
+                        input_valid = 0;
+                        bios_putstr("Invalid input. Please input task ID...\n\r");
+                        break;
+                    }
+                    id = id * 10 + (input_buf[i] - '0');
+                    if(id < 0 || id > 0xffff) {
+                        input_valid = 0;
+                        bios_putstr("Invalid ID. Please input correct task ID...\n\r");
+                        break;
+                    }
+                }
+                if(input_valid) {
+                    if(id > 0 && id <= *((uint16_t *)APP_NUM_LOC)) {
+                        uint64_t entrypoint = load_task_img(id);
+                        asm volatile(
+                            "addi sp, sp, -16\n\t"
+                            "sd ra, 8(sp)\n\t"
+                            "sd fp, 0(sp)\n\t"
+                            "add fp, sp, zero\n\t"
+                            "jalr ra, %0\n\t"
+                            "ld fp, 0(sp)\n\t"
+                            "ld ra, 8(sp)\n\t"
+                            "addi sp, sp, 16\n\t"
+                            : 
+                            : "r" (entrypoint)
+                            : "memory"
+                        );
+                    }
+                    else if(input_p > 0) {
+                        bios_putstr("ID out of range. Please input correct task ID...\n\r");
+                    }
+                    else {
+                        bios_putstr("Please input task ID...\n\r");
+                    }
+                }
+                input_p = 0;
+                continue;
+            }
+            if (ch >= 32 && ch <= 126)
+                input_buf[input_p++] = ch;
+        }
+    }
+
 
     // Infinite while loop, where CPU stays in a low-power state (QAQQQQQQQQQQQ)
     while (1)
