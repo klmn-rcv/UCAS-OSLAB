@@ -34,6 +34,7 @@ static void init_jmptab(void)
     jmptab[CONSOLE_PUTCHAR] = (long (*)())port_write_ch;
     jmptab[CONSOLE_GETCHAR] = (long (*)())port_read_ch;
     jmptab[SD_READ]         = (long (*)())sd_read;
+    jmptab[SD_WRITE]        = (long (*)())sd_write;
 }
 
 static void init_task_info(uint16_t tasknum, uint32_t task_info_offset)
@@ -53,6 +54,155 @@ static void init_task_info(uint16_t tasknum, uint32_t task_info_offset)
 /************************************************************/
 /* Do not touch this comment. Reserved for future projects. */
 /************************************************************/
+
+void command_ls(uint16_t tasknum) {
+    for(uint16_t i = 0; i < tasknum; i++) {
+        bios_putstr(tasks[i].taskname);
+        bios_putstr("\t");
+    }
+    bios_putstr("\n\r");
+}
+
+void command_batchwrite(int *strpos, char *argv, uint16_t tasknum, uint32_t task_info_offset) {
+    char name_order[512];
+    name_order[0] = '\0';
+    char *name;
+    for(uint16_t i = 1; i <= tasknum; i++) {
+        name = argv + strpos[i];
+        int task_exist = 0;
+        for(uint16_t j = 0; j < tasknum; j++) {
+            if(strcmp(tasks[j].taskname, name) == 0) {
+                task_exist = 1;
+                break;
+            }
+        }
+        if(task_exist) {
+            strcat(name_order, name);
+            if(i != tasknum) strcat(name_order, " ");
+        }
+        else {
+            bios_putstr("batchwrite: incorrect arguments\n\r");
+            return;
+        }
+    }
+    bios_sd_write((unsigned)name_order, 1, NBYTES2SEC(task_info_offset + sizeof(task_info_t) * tasknum));
+}
+
+void command_batchrun(uint16_t tasknum, uint32_t task_info_offset) {
+    char name_in_order[512];
+    char *name = name_in_order;
+    bios_sd_read((unsigned)name_in_order, 1, NBYTES2SEC(task_info_offset + sizeof(task_info_t) * tasknum));
+    int len_name_in_order = strlen(name_in_order);
+    for(int i = 0; i < len_name_in_order; i++) {
+        if(name_in_order[i] == ' ') {
+            name_in_order[i] = '\0';
+        }
+    }
+
+    int temp_result = 0;    // place to store temporary results of apps
+    for(uint16_t i = 0; i < tasknum; i++) {
+        uint64_t entrypoint = load_task_img(name, tasks, tasknum);
+        asm volatile(
+            "addi sp, sp, -24\n\t"
+            "sd s1, 16(sp)\n\t"
+            "sd ra, 8(sp)\n\t"
+            "sd fp, 0(sp)\n\t"
+            "add fp, sp, zero\n\t"
+            "lw a0, 0(%1)\n\t"
+            "add s1, %1, zero\n\t"
+            "jalr ra, %0\n\t"
+            "sw a0, 0(s1)\n\t"
+            "ld fp, 0(sp)\n\t"
+            "ld ra, 8(sp)\n\t"
+            "ld s1, 16(sp)\n\t"
+            "addi sp, sp, 24\n\t"
+            : 
+            : "r" (entrypoint), "r"(&temp_result)
+            : "memory", "a0"
+        );
+        name = name + strlen(name) + 1;
+    }
+}
+
+int check_command(char *input_buf, int input_p, uint16_t tasknum, uint32_t task_info_offset) {
+    int argc = 0;
+    int strpos[64];
+    char argv[1024];    // not char *argv[] here, for convenience
+    strcpy(argv, input_buf);
+
+    int encounter_space = 1;
+    for(int i = 0; i < input_p; i++) {
+        if(argv[i] == ' ') {
+            argv[i] = '\0';
+            encounter_space = 1;
+        }
+        else if(encounter_space == 1) {
+            encounter_space = 0;
+            strpos[argc++] = i;
+        }
+    }
+
+    if(strcmp(argv, "ls") == 0) {
+        if(argc == 1) {
+            command_ls(tasknum);
+        }
+        else {
+            bios_putstr("ls: do not need any argument\n\r");
+        }
+        return 1;
+    }
+    else if(strcmp(argv, "batchwrite") == 0) {
+        if(argc == ((int)tasknum + 1)) {
+            int success;
+            command_batchwrite(strpos, argv, tasknum, task_info_offset);
+        }
+        else {
+            bios_putstr("batchwrite: incorrect arguments\n\r");
+        }
+        return 1;
+    }
+    else if(strcmp(argv, "batchrun") == 0) {
+        if(argc == 1) {
+            command_batchrun(tasknum, task_info_offset);
+        }
+        else {
+            bios_putstr("batchrun: do not need any argument\n\r");
+        }
+        return 1;
+    }
+    return 0;
+}
+
+void load_and_execute_app(char *input_buf, int input_p, uint16_t tasknum) {
+    int file_exist = 0;
+    for(uint16_t i = 0; i < tasknum; i++) {
+        if(strcmp(input_buf, tasks[i].taskname) == 0)
+            file_exist = 1;
+    }
+
+    if(file_exist) {
+        uint64_t entrypoint = load_task_img(input_buf, tasks, tasknum);
+        asm volatile(
+            "addi sp, sp, -16\n\t"
+            "sd ra, 8(sp)\n\t"
+            "sd fp, 0(sp)\n\t"
+            "add fp, sp, zero\n\t"
+            "jalr ra, %0\n\t"
+            "ld fp, 0(sp)\n\t"
+            "ld ra, 8(sp)\n\t"
+            "addi sp, sp, 16\n\t"
+            : 
+            : "r" (entrypoint)
+            : "memory"
+        );
+    }
+    else if(input_p > 0) {
+        bios_putstr("File or command does not exist\n\r");
+    }
+    else {
+        bios_putstr("Please input file name or batch processing command...\n\r");
+    }
+}
 
 int main(uint16_t tasknum, uint32_t task_info_offset)
 {
@@ -90,43 +240,18 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
     // TODO: Load tasks by either task id [p1-task3] or task name [p1-task4],
     //   and then execute them.
 
-    bios_putstr("Please input file name...\n\r");
-
     while (1) {
         int ch = bios_getchar();
         if (ch != -1) {
-            bios_putchar(ch);
+            if(ch != '\r')
+                bios_putchar(ch);
+            else
+                bios_putstr("\n\r");
             if (ch == '\n' || ch == '\r') {
-
                 input_buf[input_p] = '\0';
-                int file_exist = 0;
-                for(uint16_t i = 0; i < tasknum; i++) {
-                    if(strcmp(input_buf, tasks[i].taskname) == 0)
-                        file_exist = 1;
-                }
 
-                if(file_exist) {
-                    uint64_t entrypoint = load_task_img(input_buf, tasks, tasknum);
-                    asm volatile(
-                        "addi sp, sp, -16\n\t"
-                        "sd ra, 8(sp)\n\t"
-                        "sd fp, 0(sp)\n\t"
-                        "add fp, sp, zero\n\t"
-                        "jalr ra, %0\n\t"
-                        "ld fp, 0(sp)\n\t"
-                        "ld ra, 8(sp)\n\t"
-                        "addi sp, sp, 16\n\t"
-                        : 
-                        : "r" (entrypoint)
-                        : "memory"
-                    );
-                }
-                else if(input_p > 0) {
-                    bios_putstr("File does not exist. Please input correct file name...\n\r");
-                }
-                else {
-                    bios_putstr("Please input file name...\n\r");
-                }
+                if(check_command(input_buf, input_p, tasknum, task_info_offset) == 0)
+                    load_and_execute_app(input_buf, input_p, tasknum);
                 
                 input_p = 0;
                 continue;

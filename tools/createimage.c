@@ -47,7 +47,7 @@ static uint32_t get_memsz(Elf64_Phdr phdr);
 static void write_segment(Elf64_Phdr phdr, FILE *fp, FILE *img, int *phyaddr);
 static void write_padding(FILE *img, int *phyaddr, int new_phyaddr);
 static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
-                           short tasknum, FILE *img, int phyaddr);
+                           short tasknum, FILE *img, int *phyaddr);
 
 int main(int argc, char **argv)
 {
@@ -153,7 +153,10 @@ static void create_image(int nfiles, char *files[])
         fclose(fp);
         files++;
     }
-    write_img_info(nbytes_kernel, taskinfo, tasknum, img, phyaddr);
+    write_img_info(nbytes_kernel, taskinfo, tasknum, img, &phyaddr);
+
+    // space for batch file
+    write_padding(img, &phyaddr, (NBYTES2SEC(phyaddr) + 1) * SECTOR_SIZE);
 
     fclose(img);
 }
@@ -230,7 +233,7 @@ static void write_padding(FILE *img, int *phyaddr, int new_phyaddr)
 }
 
 static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
-                           short tasknum, FILE * img, int phyaddr)
+                           short tasknum, FILE * img, int *phyaddr)
 {
     // TODO: [p1-task3] & [p1-task4] write image info to some certain places
     // NOTE: os size, infomation about app-info sector(s) ...
@@ -243,11 +246,12 @@ static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
     fputc(tasknum & 0xff, img);
     fputc((tasknum >> 8) & 0xff, img);
     fseek(img, TASK_INFO_OFFSET_LOC, SEEK_SET);
-    fwrite(&phyaddr, 4, 1, img);
+    fwrite(phyaddr, 4, 1, img);
 
     // p1-task4:
-    fseek(img, phyaddr, SEEK_SET);
+    fseek(img, *phyaddr, SEEK_SET);
     fwrite(taskinfo, sizeof(task_info_t), tasknum, img);
+    (*phyaddr) += sizeof(task_info_t) * tasknum;
 }
 
 /* print an error message and exit */
