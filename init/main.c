@@ -90,7 +90,7 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
     // TODO: Load tasks by either task id [p1-task3] or task name [p1-task4],
     //   and then execute them.
 
-    bios_putstr("Please input task ID...\n\r");
+    bios_putstr("Please input file name...\n\r");
 
     while (1) {
         int ch = bios_getchar();
