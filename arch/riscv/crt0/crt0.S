@@ -30,8 +30,8 @@ bss_clear_end:
 
 
     /************************************************************/
-	/* Do not touch this comment. Reserved for future projects. */
-	/************************************************************/
+    /* Do not touch this comment. Reserved for future projects. */
+    /************************************************************/
 // while(1) loop, unreachable here
 loop:
     wfi

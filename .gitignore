@@ -1,3 +1,4 @@
 *temp*
-.vscode/settings.json
-build/
+.vscode
+build
+*.txt
