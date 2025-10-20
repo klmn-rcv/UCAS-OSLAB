@@ -42,6 +42,8 @@ static void init_jmptab(void)
     jmptab[MUTEX_ACQ]       = (long (*)())do_mutex_lock_acquire;
     jmptab[MUTEX_RELEASE]   = (long (*)())do_mutex_lock_release;
 
+    jmptab[REFLUSH]         = (long (*)())screen_reflush;
+
     // TODO: [p2-task1] (S-core) initialize system call table.
 
 }
@@ -81,15 +83,70 @@ static void init_pcb_stack(
     switchto_context_t *pt_switchto =
         (switchto_context_t *)((ptr_t)pt_regs - sizeof(switchto_context_t));
 
+    pt_switchto->regs[0] = (reg_t)entry_point;  // ra
+    pt_switchto->regs[1] = (reg_t)user_stack;   // sp
+
+    for (int i = 2; i < 14; i++) {
+        pt_switchto->regs[i] = 0;
+    }
+
+    pcb->kernel_sp = (reg_t)pt_switchto;
+
 }
 
-static void init_pcb(void)
+// static void setup_fake_context(pcb_t *pcb, void *entry_point)
+// {
+//     uintptr_t context_addr = pcb->kernel_sp - sizeof(switchto_context_t);
+//     switchto_context_t *ctx = (switchto_context_t *)context_addr;
+
+//     for (int i = 0; i < 14; i++) {
+//         ctx->regs[i] = 0;
+//     }
+
+//     ctx->regs[0] = (reg_t)entry_point;  // ra
+//     ctx->regs[1] = context_addr;        // sp
+
+//     pcb->kernel_sp = context_addr;
+// }
+
+static void init_pcb(uint16_t tasknum)
 {
     /* TODO: [p2-task1] load needed tasks and init their corresponding PCB */
+    
+    for(int i = 0; i < NUM_MAX_TASK; i++) {
+        pcb[i].kernel_sp = 0;
+        pcb[i].user_sp = 0;
+        // LIST_HEAD(pcb[i].list);
+        pcb[i].pid = i;
+        pcb[i].status = TASK_EXITED;
+        pcb[i].cursor_x = 0;
+        pcb[i].cursor_y = 0;
+        pcb[i].wakeup_time = 0;
+    }
 
+    // int start_lines[] = {1, 3, 10};
+
+    char *tasknames[3] = {"print1", "print2", "fly"};
+
+    for(int i = 0; i < 3; i++) {
+        pcb[i].kernel_sp = (reg_t)allocKernelPage(1) + PAGE_SIZE;
+        pcb[i].user_sp = (reg_t)allocUserPage(1) + PAGE_SIZE;
+        pcb[i].cursor_x = 0;
+        pcb[i].cursor_y = 0/*start_lines[i]*/;
+        pcb[i].wakeup_time = 0;
+        if(i == 0) {
+            pcb[i].status = TASK_RUNNING;
+        } else {
+            pcb[i].status = TASK_READY;
+            LIST_APPEND(&pcb[i].list, &ready_queue);
+        }
+        ptr_t entry_point = load_task_img(tasknames[i], tasks, tasknum);
+        init_pcb_stack(pcb[i].kernel_sp, pcb[i].user_sp, entry_point, &pcb[i]);
+    }
 
     /* TODO: [p2-task1] remember to initialize 'current_running' */
-
+    current_running = &pcb[0];
+    asm volatile("mv tp, %0" : : "r"(current_running));
 }
 
 static void init_syscall(void)
@@ -98,154 +155,7 @@ static void init_syscall(void)
 }
 /************************************************************/
 
-void command_ls(uint16_t tasknum) {
-    for(uint16_t i = 0; i < tasknum; i++) {
-        bios_putstr(tasks[i].taskname);
-        bios_putstr("\t");
-    }
-    bios_putstr("\n\r");
-}
 
-void command_batchwrite(int *strpos, char *argv, uint16_t tasknum, uint32_t task_info_offset) {
-    char name_order[512];
-    name_order[0] = '\0';
-    char *name;
-    for(uint16_t i = 1; i <= tasknum; i++) {
-        name = argv + strpos[i];
-        int task_exist = 0;
-        for(uint16_t j = 0; j < tasknum; j++) {
-            if(strcmp(tasks[j].taskname, name) == 0) {
-                task_exist = 1;
-                break;
-            }
-        }
-        if(task_exist) {
-            strcat(name_order, name);
-            if(i != tasknum) strcat(name_order, " ");
-        }
-        else {
-            bios_putstr("batchwrite: incorrect arguments\n\r");
-            return;
-        }
-    }
-    bios_sd_write((unsigned)name_order, 1, NBYTES2SEC(task_info_offset + sizeof(task_info_t) * tasknum));
-}
-
-void command_batchrun(uint16_t tasknum, uint32_t task_info_offset) {
-    char name_in_order[512];
-    char *name = name_in_order;
-    bios_sd_read((unsigned)name_in_order, 1, NBYTES2SEC(task_info_offset + sizeof(task_info_t) * tasknum));
-    int len_name_in_order = strlen(name_in_order);
-    for(int i = 0; i < len_name_in_order; i++) {
-        if(name_in_order[i] == ' ') {
-            name_in_order[i] = '\0';
-        }
-    }
-
-    int temp_result = 0;    // place to store temporary results of apps
-    for(uint16_t i = 0; i < tasknum; i++) {
-        uint64_t entrypoint = load_task_img(name, tasks, tasknum);
-        asm volatile(
-            "addi sp, sp, -24\n\t"
-            "sd s1, 16(sp)\n\t"
-            "sd ra, 8(sp)\n\t"
-            "sd fp, 0(sp)\n\t"
-            "add fp, sp, zero\n\t"
-            "lw a0, 0(%1)\n\t"
-            "add s1, %1, zero\n\t"
-            "jalr ra, %0\n\t"
-            "sw a0, 0(s1)\n\t"
-            "ld fp, 0(sp)\n\t"
-            "ld ra, 8(sp)\n\t"
-            "ld s1, 16(sp)\n\t"
-            "addi sp, sp, 24\n\t"
-            : 
-            : "r" (entrypoint), "r"(&temp_result)
-            : "memory", "a0"
-        );
-        name = name + strlen(name) + 1;
-    }
-}
-
-int check_command(char *input_buf, int input_p, uint16_t tasknum, uint32_t task_info_offset) {
-    int argc = 0;
-    int strpos[64];
-    char argv[1024];    // not char *argv[] here, for convenience
-    strcpy(argv, input_buf);
-
-    int encounter_space = 1;
-    for(int i = 0; i < input_p; i++) {
-        if(argv[i] == ' ') {
-            argv[i] = '\0';
-            encounter_space = 1;
-        }
-        else if(encounter_space == 1) {
-            encounter_space = 0;
-            strpos[argc++] = i;
-        }
-    }
-
-    if(strcmp(argv, "ls") == 0) {
-        if(argc == 1) {
-            command_ls(tasknum);
-        }
-        else {
-            bios_putstr("ls: do not need any argument\n\r");
-        }
-        return 1;
-    }
-    else if(strcmp(argv, "batchwrite") == 0) {
-        if(argc == ((int)tasknum + 1)) {
-            int success;
-            command_batchwrite(strpos, argv, tasknum, task_info_offset);
-        }
-        else {
-            bios_putstr("batchwrite: incorrect arguments\n\r");
-        }
-        return 1;
-    }
-    else if(strcmp(argv, "batchrun") == 0) {
-        if(argc == 1) {
-            command_batchrun(tasknum, task_info_offset);
-        }
-        else {
-            bios_putstr("batchrun: do not need any argument\n\r");
-        }
-        return 1;
-    }
-    return 0;
-}
-
-void load_and_execute_app(char *input_buf, int input_p, uint16_t tasknum) {
-    int file_exist = 0;
-    for(uint16_t i = 0; i < tasknum; i++) {
-        if(strcmp(input_buf, tasks[i].taskname) == 0)
-            file_exist = 1;
-    }
-
-    if(file_exist) {
-        uint64_t entrypoint = load_task_img(input_buf, tasks, tasknum);
-        asm volatile(
-            "addi sp, sp, -16\n\t"
-            "sd ra, 8(sp)\n\t"
-            "sd fp, 0(sp)\n\t"
-            "add fp, sp, zero\n\t"
-            "jalr ra, %0\n\t"
-            "ld fp, 0(sp)\n\t"
-            "ld ra, 8(sp)\n\t"
-            "addi sp, sp, 16\n\t"
-            : 
-            : "r" (entrypoint)
-            : "memory"
-        );
-    }
-    else if(input_p > 0) {
-        bios_putstr("File or command does not exist\n\r");
-    }
-    else {
-        bios_putstr("Please input file name or batch processing command...\n\r");
-    }
-}
 
 int main(uint16_t tasknum, uint32_t task_info_offset)
 {
@@ -256,7 +166,7 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
     init_task_info(tasknum, task_info_offset);
 
     // Init Process Control Blocks |•'-'•) ✧
-    init_pcb();
+    init_pcb(tasknum);
     printk("> [INIT] PCB initialization succeeded.\n");
 
     // Read CPU frequency (｡•ᴗ-)_
@@ -280,36 +190,9 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
 
     // TODO: [p2-task4] Setup timer interrupt and enable all interrupt globally
     // NOTE: The function of sstatus.sie is different from sie's
-    
 
 
-    char input_buf[1024];
-    int input_p = 0;
-
-    // TODO: Load tasks by either task id [p1-task3] or task name [p1-task4],
-    //   and then execute them.
-
-    while (1) {
-        int ch = bios_getchar();
-        if (ch != -1) {
-            if(ch != '\r')
-                bios_putchar(ch);
-            else
-                bios_putstr("\n\r");
-            if (ch == '\n' || ch == '\r') {
-                input_buf[input_p] = '\0';
-
-                if(check_command(input_buf, input_p, tasknum, task_info_offset) == 0)
-                    load_and_execute_app(input_buf, input_p, tasknum);
-                
-                input_p = 0;
-                continue;
-            }
-            if (ch >= 32 && ch <= 126)
-                input_buf[input_p++] = ch;
-        }
-    }
-
+    switch_to(NULL, current_running);
 
     // Infinite while loop, where CPU stays in a low-power state (QAQQQQQQQQQQQ)
     while (1)

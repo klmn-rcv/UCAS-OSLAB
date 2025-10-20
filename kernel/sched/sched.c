@@ -31,9 +31,26 @@ void do_scheduler(void)
 
     // TODO: [p2-task1] Modify the current_running pointer.
 
+    if (current_running->status == TASK_RUNNING) {
+        current_running->status = TASK_READY;
+        LIST_APPEND(&current_running->list, &ready_queue);
+    }
+
+    if(!LIST_EMPTY(&ready_queue)) {
+        pcb_t *prev_pcb = current_running;
+        list_node_t *next_node = LIST_FIRST(&ready_queue);
+        pcb_t *next_pcb = LIST_ENTRY(next_node, pcb_t, list);
+
+        LIST_DELETE(next_node);
+
+        next_pcb->status = TASK_RUNNING;
+        current_running = next_pcb;
+        asm volatile("mv tp, %0" : : "r"(current_running));
 
     // TODO: [p2-task1] switch_to current_running
 
+        switch_to(prev_pcb, next_pcb);
+    }
 }
 
 void do_sleep(uint32_t sleep_time)

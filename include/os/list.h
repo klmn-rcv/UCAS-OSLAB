@@ -51,5 +51,30 @@ typedef list_node_t list_head;
 #define LIST_HEAD(name) struct list_node name = {&(name), &(name)}
 
 /* TODO: [p2-task1] implement your own list API */
+#define LIST_INSERT(_new, _prev, _next) do { \
+    (_new)->next = (_next); \
+    (_new)->prev = (_prev); \
+    (_prev)->next = (_new); \
+    (_next)->prev = (_new); \
+} while (0)
+
+#define LIST_APPEND(_new, _head) \
+    LIST_INSERT((_new), (_head)->prev, (_head))
+
+#define LIST_DELETE(_node) do { \
+    (_node)->prev->next = (_node)->next; \
+    (_node)->next->prev = (_node)->prev; \
+    (_node)->next = (_node); \
+    (_node)->prev = (_node); \
+} while (0)
+
+#define LIST_EMPTY(_head) ((_head)->next == (_head))
+
+#define LIST_FIRST(_head) (LIST_EMPTY(_head) ? NULL : (_head)->next)
+
+#define LIST_LAST(_head) (LIST_EMPTY(_head) ? NULL : (_head)->prev)
+
+#define LIST_ENTRY(_ptr, _type, _member) \
+    ((_type *)((char *)(_ptr) - (unsigned long)(&((_type *)0)->_member)))
 
 #endif
