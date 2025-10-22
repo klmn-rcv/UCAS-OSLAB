@@ -51,6 +51,11 @@ typedef list_node_t list_head;
 #define LIST_HEAD(name) struct list_node name = {&(name), &(name)}
 
 /* TODO: [p2-task1] implement your own list API */
+#define LIST_INIT_HEAD(_name) do { \
+    (_name)->next = (_name); \
+    (_name)->prev = (_name); \
+} while (0)
+
 #define LIST_INSERT(_new, _prev, _next) do { \
     (_new)->next = (_next); \
     (_new)->prev = (_prev); \

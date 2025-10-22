@@ -94,21 +94,6 @@ static void init_pcb_stack(
 
 }
 
-// static void setup_fake_context(pcb_t *pcb, void *entry_point)
-// {
-//     uintptr_t context_addr = pcb->kernel_sp - sizeof(switchto_context_t);
-//     switchto_context_t *ctx = (switchto_context_t *)context_addr;
-
-//     for (int i = 0; i < 14; i++) {
-//         ctx->regs[i] = 0;
-//     }
-
-//     ctx->regs[0] = (reg_t)entry_point;  // ra
-//     ctx->regs[1] = context_addr;        // sp
-
-//     pcb->kernel_sp = context_addr;
-// }
-
 static void init_pcb(uint16_t tasknum)
 {
     /* TODO: [p2-task1] load needed tasks and init their corresponding PCB */
@@ -116,7 +101,6 @@ static void init_pcb(uint16_t tasknum)
     for(int i = 0; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
         pcb[i].user_sp = 0;
-        // LIST_HEAD(pcb[i].list);
         pcb[i].pid = i;
         pcb[i].status = TASK_EXITED;
         pcb[i].cursor_x = 0;
@@ -126,9 +110,9 @@ static void init_pcb(uint16_t tasknum)
 
     // int start_lines[] = {1, 3, 10};
 
-    char *tasknames[3] = {"print1", "print2", "fly"};
+    char *tasknames[5] = {"print1", "print2", "lock1", "lock2", "fly"};
 
-    for(int i = 0; i < 3; i++) {
+    for(int i = 0; i < 5; i++) {
         pcb[i].kernel_sp = (reg_t)allocKernelPage(1) + PAGE_SIZE;
         pcb[i].user_sp = (reg_t)allocUserPage(1) + PAGE_SIZE;
         pcb[i].cursor_x = 0;

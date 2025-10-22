@@ -2,3 +2,6 @@
 .vscode
 build
 *.txt
+*.gdb
+*.exp
+*.sh
