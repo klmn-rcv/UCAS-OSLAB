@@ -74,7 +74,6 @@ void do_mutex_lock_release(int mlock_idx)
     /* TODO: [p2-task2] release mutex lock */
     if(!LIST_EMPTY(&mlocks[mlock_idx].block_queue)) {
         list_node_t *first_blocked_node = LIST_FIRST(&mlocks[mlock_idx].block_queue);
-        // pcb_t *first_blocked_pcb = LIST_ENTRY(first_blocked_node, pcb_t, list);
         do_unblock(first_blocked_node);
     } else {
         mlocks[mlock_idx].lock.status = UNLOCKED;
