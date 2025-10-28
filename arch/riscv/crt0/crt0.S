@@ -12,9 +12,9 @@ ENTRY(_start)
     la t0, __bss_start
     la t1, __BSS_END__
 bss_clear_loop:
-    bge t0, t1, bss_clear_end
-    sw zero, 0(t0)
-    addi t0, t0, 4
+    beq t0, t1, bss_clear_end
+    sb zero, 0(t0)
+    addi t0, t0, 1
     jal zero, bss_clear_loop
 bss_clear_end:
     /* TODO: [p1-task3] enter main function */
