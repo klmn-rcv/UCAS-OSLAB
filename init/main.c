@@ -84,7 +84,7 @@ static void init_pcb_stack(
         (switchto_context_t *)((ptr_t)pt_regs - sizeof(switchto_context_t));
 
     pt_switchto->regs[0] = (reg_t)entry_point;  // ra
-    pt_switchto->regs[1] = (reg_t)user_stack;   // sp
+    pt_switchto->regs[1] = (reg_t)kernel_stack;   // sp
 
     for (int i = 2; i < 14; i++) {
         pt_switchto->regs[i] = 0;
