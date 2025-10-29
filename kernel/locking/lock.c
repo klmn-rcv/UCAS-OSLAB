@@ -39,8 +39,6 @@ void spin_lock_release(spin_lock_t *lock)
 
 int do_mutex_lock_init(int key)
 {
-    printk("HERE!!\n");
-
     /* TODO: [p2-task2] initialize mutex lock */
     for (int i = 0; i < LOCK_NUM; i++) {
         if (mlocks[i].key == key) {
@@ -65,7 +63,7 @@ void do_mutex_lock_acquire(int mlock_idx)
         do_block(&current_running->list, &mlocks[mlock_idx].block_queue);
     } else {
         mlocks[mlock_idx].lock.status = LOCKED;
-        LIST_APPEND(&current_running->list, &mlocks[mlock_idx].block_queue);
+        // LIST_APPEND(&current_running->list, &mlocks[mlock_idx].block_queue);
     }
 }
 
