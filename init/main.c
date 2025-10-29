@@ -90,7 +90,7 @@ static void init_pcb_stack(
         pt_switchto->regs[i] = 0;
     }
 
-    pcb->kernel_sp = (reg_t)kernel_stack;
+    pcb->kernel_sp = (reg_t)pt_switchto;
 
 }
 
