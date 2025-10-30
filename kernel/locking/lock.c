@@ -63,7 +63,6 @@ void do_mutex_lock_acquire(int mlock_idx)
         do_block(&current_running->list, &mlocks[mlock_idx].block_queue);
     } else {
         mlocks[mlock_idx].lock.status = LOCKED;
-        // LIST_APPEND(&current_running->list, &mlocks[mlock_idx].block_queue);
     }
 }
 

@@ -17,6 +17,8 @@
 #include <type.h>
 #include <csr.h>
 
+#define TASK_NUM 12
+
 extern void ret_from_exception();
 
 // Task info array
@@ -75,6 +77,19 @@ static void init_pcb_stack(
     regs_context_t *pt_regs =
         (regs_context_t *)(kernel_stack - sizeof(regs_context_t));
 
+    for(int i = 0; i < 32; i++) {
+        pt_regs->regs[i] = 0;
+    }
+
+    // pt_regs->regs[1] = 0;                       // ra
+    pt_regs->regs[2] = (reg_t)user_stack;       // sp
+    pt_regs->regs[4] = (reg_t)pcb;              // tp
+
+    pt_regs->sstatus = SR_SPIE | SR_SIE;
+    pt_regs->sepc = (reg_t)entry_point;
+    pt_regs->stval = 0;
+    pt_regs->scause = 0;
+
 
     /* TODO: [p2-task1] set sp to simulate just returning from switch_to
      * NOTE: you should prepare a stack, and push some values to
@@ -83,8 +98,8 @@ static void init_pcb_stack(
     switchto_context_t *pt_switchto =
         (switchto_context_t *)((ptr_t)pt_regs - sizeof(switchto_context_t));
 
-    pt_switchto->regs[0] = (reg_t)entry_point;  // ra
-    pt_switchto->regs[1] = (reg_t)kernel_stack;   // sp
+    pt_switchto->regs[0] = (reg_t)ret_from_exception;  // ra
+    pt_switchto->regs[1] = (reg_t)pt_switchto;   // sp
 
     for (int i = 2; i < 14; i++) {
         pt_switchto->regs[i] = 0;
@@ -110,11 +125,12 @@ static void init_pcb(uint16_t tasknum)
 
     // int start_lines[] = {1, 3, 10};
 
-    char *tasknames[5] = {"print1", "print2", "lock1", "lock2", "fly"};
+    char *tasknames[TASK_NUM] = {"print1", "print2", "lock1", "lock2", "sleep", "timer", "fly", "fly1", "fly2", "fly3", "fly4", "fly5"};
+    
 
-    for(int i = 0; i < 5; i++) {
-        pcb[i].kernel_sp = (reg_t)allocKernelPage(1) + PAGE_SIZE;
-        pcb[i].user_sp = (reg_t)allocUserPage(1) + PAGE_SIZE;
+    for(int i = 0; i < TASK_NUM; i++) {
+        pcb[i].kernel_sp = (reg_t)allocKernelPage(2) + 2 * PAGE_SIZE;
+        pcb[i].user_sp = (reg_t)allocUserPage(2) + 2 * PAGE_SIZE;
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0/*start_lines[i]*/;
         pcb[i].wakeup_time = 0;
@@ -136,6 +152,16 @@ static void init_pcb(uint16_t tasknum)
 static void init_syscall(void)
 {
     // TODO: [p2-task3] initialize system call table.
+    syscall[SYSCALL_SLEEP]        = (long (*)())do_sleep;
+    syscall[SYSCALL_YIELD]        = (long (*)())do_scheduler;
+    syscall[SYSCALL_WRITE]        = (long (*)())screen_write;
+    syscall[SYSCALL_CURSOR]       = (long (*)())screen_move_cursor;
+    syscall[SYSCALL_REFLUSH]      = (long (*)())screen_reflush;
+    syscall[SYSCALL_GET_TIMEBASE] = (long (*)())get_time_base;
+    syscall[SYSCALL_GET_TICK]     = (long (*)())get_ticks;
+    syscall[SYSCALL_LOCK_INIT]    = (long (*)())do_mutex_lock_init;
+    syscall[SYSCALL_LOCK_ACQ]     = (long (*)())do_mutex_lock_acquire;
+    syscall[SYSCALL_LOCK_RELEASE] = (long (*)())do_mutex_lock_release;
 }
 /************************************************************/
 
@@ -178,16 +204,16 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
 
     switch_to(NULL, current_running);
 
-    // Infinite while loop, where CPU stays in a low-power state (QAQQQQQQQQQQQ)
-    while (1)
-    {
-        // If you do non-preemptive scheduling, it's used to surrender control
-        do_scheduler();
+    // // Infinite while loop, where CPU stays in a low-power state (QAQQQQQQQQQQQ)
+    // while (1)
+    // {
+    //     // If you do non-preemptive scheduling, it's used to surrender control
+    //     do_scheduler();
 
-        // If you do preemptive scheduling, they're used to enable CSR_SIE and wfi
-        // enable_preempt();
-        // asm volatile("wfi");
-    }
+    //     // If you do preemptive scheduling, they're used to enable CSR_SIE and wfi
+    //     // enable_preempt();
+    //     // asm volatile("wfi");
+    // }
 
     return 0;
 }

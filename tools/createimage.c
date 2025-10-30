@@ -102,7 +102,6 @@ static void create_image(int nfiles, char *files[])
 
         if (taskidx >= 0) {
             taskinfo[taskidx].taskid = (uint16_t)taskidx;
-            // printf("DEBUG: %s\n", *files);
             strcpy(taskinfo[taskidx].taskname, *files);
             taskinfo[taskidx].offset = phyaddr;
         }

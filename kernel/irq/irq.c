@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <screen.h>
 
+#define SCAUSE_IRQ_FLAG   (1UL << 63)
+
 handler_t irq_table[IRQC_COUNT];
 handler_t exc_table[EXCC_COUNT];
 
@@ -14,6 +16,13 @@ void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
 {
     // TODO: [p2-task3] & [p2-task4] interrupt handler.
     // call corresponding handler by the value of `scause`
+    if(scause == (SCAUSE_IRQ_FLAG | IRQC_S_TIMER)) {
+        handle_irq_timer(regs, stval, scause);
+    } else if(scause == EXCC_SYSCALL) {
+        handle_syscall(regs, stval, scause);
+    } else {
+        handle_other(regs, stval, scause);
+    }
 }
 
 void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)
@@ -26,11 +35,22 @@ void init_exception()
 {
     /* TODO: [p2-task3] initialize exc_table */
     /* NOTE: handle_syscall, handle_other, etc.*/
+    exc_table[EXCC_INST_MISALIGNED]  = handle_other;
+    exc_table[EXCC_INST_ACCESS]      = handle_other;
+    exc_table[EXCC_BREAKPOINT]       = handle_other;
+    exc_table[EXCC_LOAD_ACCESS]      = handle_other;
+    exc_table[EXCC_STORE_ACCESS]     = handle_other;
+    exc_table[EXCC_SYSCALL]          = handle_syscall;
+    exc_table[EXCC_INST_PAGE_FAULT]  = handle_other;
+    exc_table[EXCC_LOAD_PAGE_FAULT]  = handle_other;
+    exc_table[EXCC_STORE_PAGE_FAULT] = handle_other;
+
 
     /* TODO: [p2-task4] initialize irq_table */
     /* NOTE: handle_int, handle_other, etc.*/
 
     /* TODO: [p2-task3] set up the entrypoint of exceptions */
+    setup_exception();
 }
 
 void handle_other(regs_context_t *regs, uint64_t stval, uint64_t scause)
@@ -50,8 +70,8 @@ void handle_other(regs_context_t *regs, uint64_t stval, uint64_t scause)
         }
         printk("\n\r");
     }
-    printk("sstatus: 0x%lx sbadaddr: 0x%lx scause: %lu\n\r",
-           regs->sstatus, regs->sbadaddr, regs->scause);
+    printk("sstatus: 0x%lx stval: 0x%lx scause: %lu\n\r",
+           regs->sstatus, regs->stval, regs->scause);
     printk("sepc: 0x%lx\n\r", regs->sepc);
     printk("tval: 0x%lx cause: 0x%lx\n", stval, scause);
     assert(0);
