@@ -9,8 +9,10 @@ ENTRY(setup_exception)
   li t0, 3
   csrc stvec, t0
 
-  jr ra
 
   /* TODO: [p2-task4] enable interrupts globally */
+  la t0, SR_SIE
+  csrs sstatus, t0
+  jr ra
 
 ENDPROC(setup_exception)

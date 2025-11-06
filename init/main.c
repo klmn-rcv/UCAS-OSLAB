@@ -85,7 +85,7 @@ static void init_pcb_stack(
     pt_regs->regs[2] = (reg_t)user_stack;       // sp
     pt_regs->regs[4] = (reg_t)pcb;              // tp
 
-    pt_regs->sstatus = SR_SPIE | SR_SIE;
+    pt_regs->sstatus = SR_SIE;
     pt_regs->sepc = (reg_t)entry_point;
     pt_regs->stval = 0;
     pt_regs->scause = 0;
@@ -112,8 +112,10 @@ static void init_pcb_stack(
 static void init_pcb(uint16_t tasknum)
 {
     /* TODO: [p2-task1] load needed tasks and init their corresponding PCB */
+
+    pcb[0] = pid0_pcb;
     
-    for(int i = 0; i < NUM_MAX_TASK; i++) {
+    for(int i = 1; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
         pcb[i].user_sp = 0;
         pcb[i].pid = i;
@@ -123,28 +125,22 @@ static void init_pcb(uint16_t tasknum)
         pcb[i].wakeup_time = 0;
     }
 
-    // int start_lines[] = {1, 3, 10};
-
     char *tasknames[TASK_NUM] = {"print1", "print2", "lock1", "lock2", "sleep", "timer", "fly", "fly1", "fly2", "fly3", "fly4", "fly5"};
     
-
-    for(int i = 0; i < TASK_NUM; i++) {
-        pcb[i].kernel_sp = (reg_t)allocKernelPage(2) + 2 * PAGE_SIZE;
-        pcb[i].user_sp = (reg_t)allocUserPage(2) + 2 * PAGE_SIZE;
+    for(int i = 1; i <= TASK_NUM; i++) {
+        pcb[i].kernel_sp = (reg_t)allocKernelPage(3) + 3 * PAGE_SIZE;
+        pcb[i].user_sp = (reg_t)allocUserPage(3) + 3 * PAGE_SIZE;
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0/*start_lines[i]*/;
         pcb[i].wakeup_time = 0;
-        if(i == 0) {
-            pcb[i].status = TASK_RUNNING;
-        } else {
-            pcb[i].status = TASK_READY;
-            LIST_APPEND(&pcb[i].list, &ready_queue);
-        }
-        ptr_t entry_point = load_task_img(tasknames[i], tasks, tasknum);
+        pcb[i].status = TASK_READY;
+        LIST_APPEND(&pcb[i].list, &ready_queue);
+        ptr_t entry_point = load_task_img(tasknames[i-1], tasks, tasknum);
         init_pcb_stack(pcb[i].kernel_sp, pcb[i].user_sp, entry_point, &pcb[i]);
     }
 
     /* TODO: [p2-task1] remember to initialize 'current_running' */
+    pcb[0].status = TASK_RUNNING;
     current_running = &pcb[0];
     asm volatile("mv tp, %0" : : "r"(current_running));
 }
@@ -201,19 +197,16 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
     // TODO: [p2-task4] Setup timer interrupt and enable all interrupt globally
     // NOTE: The function of sstatus.sie is different from sie's
 
-
-    switch_to(NULL, current_running);
-
     // // Infinite while loop, where CPU stays in a low-power state (QAQQQQQQQQQQQ)
-    // while (1)
-    // {
-    //     // If you do non-preemptive scheduling, it's used to surrender control
-    //     do_scheduler();
+    while (1)
+    {
+        // If you do non-preemptive scheduling, it's used to surrender control
+        // do_scheduler();
 
-    //     // If you do preemptive scheduling, they're used to enable CSR_SIE and wfi
-    //     // enable_preempt();
-    //     // asm volatile("wfi");
-    // }
+        // If you do preemptive scheduling, they're used to enable CSR_SIE and wfi
+        enable_preempt();
+        asm volatile("wfi");
+    }
 
     return 0;
 }

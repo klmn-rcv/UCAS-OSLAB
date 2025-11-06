@@ -9,6 +9,9 @@ void handle_syscall(regs_context_t *regs, uint64_t interrupt, uint64_t cause)
      * HINT: call syscall function like syscall[fn](arg0, arg1, arg2),
      * and pay attention to the return value and sepc
      */
+
+    regs->sepc += 4;
+
     unsigned long sysno = regs->regs[17];
     unsigned long arg0 = regs->regs[10];
     unsigned long arg1 = regs->regs[11];

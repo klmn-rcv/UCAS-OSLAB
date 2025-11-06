@@ -47,13 +47,13 @@ int main(void)
 
                 sys_move_cursor(i/CYCLE_PER_MOVE, j + 2);
                 printf("%s", plane3);
-                sys_yield();
+                //sys_yield();
                 // for (int j=0;j<200000;j++); // wait
                 if (remain_length) remain_length--;
                 // sys_set_sche_workload(remain_length);
             }
         }
-        sys_yield();
+        //sys_yield();
         sys_move_cursor(0, j);
         printf("%s", blank);
         sys_move_cursor(0, j + 1);

@@ -60,7 +60,6 @@
   csrr t0, sstatus
   sd t0, OFFSET_REG_SSTATUS(sp)
   csrr t0, sepc
-  addi t0, t0, 4      // sepc + 4
   sd t0, OFFSET_REG_SEPC(sp)
   csrr t0, stval
   sd t0, OFFSET_REG_STVAL(sp)
@@ -114,6 +113,7 @@
   ld t0, OFFSET_REG_SSTATUS(sp)
   csrw sstatus, t0
   ld t0, OFFSET_REG_SEPC(sp)
+  //addi t0, t0, 4      // sepc + 4
   csrw sepc, t0
 
   ld t0, OFFSET_REG_T0(sp)  // load sp as the second last one
@@ -147,7 +147,7 @@ ENDPROC(disable_interrupt)
 // NOTE: the address of previous pcb in a0
 // NOTE: the address of next pcb in a1
 ENTRY(switch_to)
-  beq a0, zero, no_saving
+  //beq a0, zero, no_saving
   //ld sp, PCB_KERNEL_SP(a0)
   addi sp, sp, -(SWITCH_TO_SIZE)
 
@@ -170,7 +170,7 @@ ENTRY(switch_to)
 
   sd sp, PCB_KERNEL_SP(a0)
 
-no_saving:
+//no_saving:
   /* TODO: [p2-task1] restore all callee save registers from kernel stack,
    * see the definition of `struct switchto_context` in sched.h*/
   ld sp, PCB_KERNEL_SP(a1)

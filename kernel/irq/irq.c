@@ -29,6 +29,10 @@ void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)
 {
     // TODO: [p2-task4] clock interrupt handler.
     // Note: use bios_set_timer to reset the timer and remember to reschedule
+    uint64_t current_time = get_ticks();
+    bios_set_timer(current_time + TIMER_INTERVAL);
+
+    do_scheduler();
 }
 
 void init_exception()
@@ -48,6 +52,15 @@ void init_exception()
 
     /* TODO: [p2-task4] initialize irq_table */
     /* NOTE: handle_int, handle_other, etc.*/
+    irq_table[IRQC_U_SOFT]  = handle_other;
+    irq_table[IRQC_S_SOFT]  = handle_other;
+    irq_table[IRQC_M_SOFT]  = handle_other;
+    irq_table[IRQC_U_TIMER] = handle_other;
+    irq_table[IRQC_S_TIMER] = handle_irq_timer;
+    irq_table[IRQC_M_TIMER] = handle_other;
+    irq_table[IRQC_U_EXT]   = handle_other;
+    irq_table[IRQC_S_EXT]   = handle_other;
+    irq_table[IRQC_M_EXT]   = handle_other;
 
     /* TODO: [p2-task3] set up the entrypoint of exceptions */
     setup_exception();
