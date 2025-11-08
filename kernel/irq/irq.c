@@ -8,6 +8,7 @@
 #include <screen.h>
 
 #define SCAUSE_IRQ_FLAG   (1UL << 63)
+#define LENGTH 60
 
 handler_t irq_table[IRQC_COUNT];
 handler_t exc_table[EXCC_COUNT];
@@ -27,11 +28,8 @@ void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
 
 void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)
 {
-    // TODO: [p2-task4] clock interrupt handler.
-    // Note: use bios_set_timer to reset the timer and remember to reschedule
     uint64_t current_time = get_ticks();
     bios_set_timer(current_time + TIMER_INTERVAL);
-
     do_scheduler();
 }
 

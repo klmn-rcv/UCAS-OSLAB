@@ -17,7 +17,7 @@
 #include <type.h>
 #include <csr.h>
 
-#define TASK_NUM 12
+#define TASK_NUM 5
 
 extern void ret_from_exception();
 
@@ -123,9 +123,12 @@ static void init_pcb(uint16_t tasknum)
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0;
         pcb[i].wakeup_time = 0;
+        pcb[i].sum_length = 0;
+        pcb[i].check_point = 0;
+        pcb[i].progress = 0;
     }
 
-    char *tasknames[TASK_NUM] = {"print1", "print2", "lock1", "lock2", "sleep", "timer", "fly", "fly1", "fly2", "fly3", "fly4", "fly5"};
+    char *tasknames[TASK_NUM] = {/*"print1", "print2", "lock1", "lock2", "sleep", "timer", "fly", */"fly1", "fly2", "fly3", "fly4", "fly5"};
     
     for(int i = 1; i <= TASK_NUM; i++) {
         pcb[i].kernel_sp = (reg_t)allocKernelPage(3) + 3 * PAGE_SIZE;
@@ -133,6 +136,9 @@ static void init_pcb(uint16_t tasknum)
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0/*start_lines[i]*/;
         pcb[i].wakeup_time = 0;
+        pcb[i].sum_length = 0;
+        pcb[i].check_point = 60 - 10 * i;
+        pcb[i].progress = 0;
         pcb[i].status = TASK_READY;
         LIST_APPEND(&pcb[i].list, &ready_queue);
         ptr_t entry_point = load_task_img(tasknames[i-1], tasks, tasknum);
@@ -145,19 +151,24 @@ static void init_pcb(uint16_t tasknum)
     asm volatile("mv tp, %0" : : "r"(current_running));
 }
 
+void set_sche_workload(uint64_t sum_length) {
+    current_running->sum_length = sum_length;
+}
+
 static void init_syscall(void)
 {
     // TODO: [p2-task3] initialize system call table.
-    syscall[SYSCALL_SLEEP]        = (long (*)())do_sleep;
-    syscall[SYSCALL_YIELD]        = (long (*)())do_scheduler;
-    syscall[SYSCALL_WRITE]        = (long (*)())screen_write;
-    syscall[SYSCALL_CURSOR]       = (long (*)())screen_move_cursor;
-    syscall[SYSCALL_REFLUSH]      = (long (*)())screen_reflush;
-    syscall[SYSCALL_GET_TIMEBASE] = (long (*)())get_time_base;
-    syscall[SYSCALL_GET_TICK]     = (long (*)())get_ticks;
-    syscall[SYSCALL_LOCK_INIT]    = (long (*)())do_mutex_lock_init;
-    syscall[SYSCALL_LOCK_ACQ]     = (long (*)())do_mutex_lock_acquire;
-    syscall[SYSCALL_LOCK_RELEASE] = (long (*)())do_mutex_lock_release;
+    syscall[SYSCALL_SLEEP]             = (long (*)())do_sleep;
+    syscall[SYSCALL_YIELD]             = (long (*)())do_scheduler;
+    syscall[SYSCALL_WRITE]             = (long (*)())screen_write;
+    syscall[SYSCALL_CURSOR]            = (long (*)())screen_move_cursor;
+    syscall[SYSCALL_REFLUSH]           = (long (*)())screen_reflush;
+    syscall[SYSCALL_GET_TIMEBASE]      = (long (*)())get_time_base;
+    syscall[SYSCALL_GET_TICK]          = (long (*)())get_ticks;
+    syscall[SYSCALL_LOCK_INIT]         = (long (*)())do_mutex_lock_init;
+    syscall[SYSCALL_LOCK_ACQ]          = (long (*)())do_mutex_lock_acquire;
+    syscall[SYSCALL_LOCK_RELEASE]      = (long (*)())do_mutex_lock_release;
+    syscall[SYSCALL_SET_SCHE_WORKLOAD] = (long (*)())set_sche_workload;
 }
 /************************************************************/
 
@@ -196,6 +207,8 @@ int main(uint16_t tasknum, uint32_t task_info_offset)
 
     // TODO: [p2-task4] Setup timer interrupt and enable all interrupt globally
     // NOTE: The function of sstatus.sie is different from sie's
+    uint64_t current_time = get_ticks();
+    bios_set_timer(current_time + TIMER_INTERVAL);
 
     // // Infinite while loop, where CPU stays in a low-power state (QAQQQQQQQQQQQ)
     while (1)

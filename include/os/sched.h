@@ -85,6 +85,15 @@ typedef struct pcb
     /* time(seconds) to wake up sleeping PCB */
     uint64_t wakeup_time;
 
+    /* sum flying length of a plane */
+    uint64_t sum_length;
+
+    /* check point of a plane (remain length) */
+    int check_point;
+
+    /* progress of a plane (sum) */
+    uint64_t progress;
+
 } pcb_t;
 
 /* ready queue to run */

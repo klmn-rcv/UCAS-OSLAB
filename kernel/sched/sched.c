@@ -7,6 +7,8 @@
 #include <printk.h>
 #include <assert.h>
 
+#define LENGTH 60
+
 pcb_t pcb[NUM_MAX_TASK];
 const ptr_t pid0_stack = INIT_KERNEL_STACK + PAGE_SIZE;
 pcb_t pid0_pcb = {
@@ -20,6 +22,44 @@ LIST_HEAD(sleep_queue);
 
 /* global process id */
 pid_t process_id = 1;
+
+list_node_t *get_last_by_progress(list_head *head) { //descending
+    if(current_running->pid != 0) {
+        uint64_t sum_length = current_running->sum_length;
+        uint64_t times = sum_length / 60;
+        int remain_length = 60 - (sum_length % 60);
+        int check_point = current_running->check_point;
+        int this_process;
+        if (remain_length > check_point) {
+            this_process = 6000 - (6000 * (remain_length - check_point)) / (LENGTH - check_point);
+        } else {
+            this_process = 10000 - (4000 * remain_length) / check_point;
+        }
+        current_running->progress = 10000 * times + this_process;
+    }
+
+    if (LIST_EMPTY(head)) {
+        return NULL;
+    }
+    else if(head->next->next == head) {
+        return head->next;
+    }
+
+    list_node_t *node, *next_node;
+
+    uint64_t min_progress = 0xFFFFFFFFFFFFFFFF;
+    list_node_t *min_progress_node = NULL;
+    for(node = LIST_FIRST(head); node != head; node = next_node) {
+        pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+        next_node = node->next;
+        if(node_pcb->pid != 0 && node_pcb->progress < min_progress) {
+            min_progress = node_pcb->progress;
+            min_progress_node = node;
+        }
+    }
+
+    return min_progress_node;
+}
 
 void do_scheduler(void)
 {
@@ -39,7 +79,7 @@ void do_scheduler(void)
 
     if(!LIST_EMPTY(&ready_queue)) {
         pcb_t *prev_pcb = current_running;
-        list_node_t *next_node = LIST_FIRST(&ready_queue);
+        list_node_t *next_node = get_last_by_progress(&ready_queue);
         pcb_t *next_pcb = LIST_ENTRY(next_node, pcb_t, list);
 
         LIST_DELETE(next_node);

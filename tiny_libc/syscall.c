@@ -112,6 +112,12 @@ void sys_sleep(uint32_t time)
     invoke_syscall(SYSCALL_SLEEP, (long)time, 0, 0, 0, 0);
 }
 
+void sys_set_sche_workload(uint64_t sum_length)
+{
+    /* TODO: [p2-task3] call invoke_syscall to implement sys_sleep */
+    invoke_syscall(SYSCALL_SET_SCHE_WORKLOAD, (long)sum_length, 0, 0, 0, 0);
+}
+
 /************************************************************/
 /* Do not touch this comment. Reserved for future projects. */
 /************************************************************/
