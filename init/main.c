@@ -17,7 +17,7 @@
 #include <type.h>
 #include <csr.h>
 
-#define TASK_NUM 5
+#define TASK_NUM 12
 
 extern void ret_from_exception();
 
@@ -123,12 +123,13 @@ static void init_pcb(uint16_t tasknum)
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0;
         pcb[i].wakeup_time = 0;
+        pcb[i].is_plane = 0;
         pcb[i].sum_length = 0;
         pcb[i].check_point = 0;
         pcb[i].progress = 0;
     }
 
-    char *tasknames[TASK_NUM] = {/*"print1", "print2", "lock1", "lock2", "sleep", "timer", "fly", */"fly1", "fly2", "fly3", "fly4", "fly5"};
+    char *tasknames[TASK_NUM] = {"fly1", "fly2", "fly3", "fly4", "fly5", "print1", "print2", "lock1", "lock2", "sleep", "timer", "fly"};
     
     for(int i = 1; i <= TASK_NUM; i++) {
         pcb[i].kernel_sp = (reg_t)allocKernelPage(3) + 3 * PAGE_SIZE;
@@ -136,9 +137,18 @@ static void init_pcb(uint16_t tasknum)
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0/*start_lines[i]*/;
         pcb[i].wakeup_time = 0;
-        pcb[i].sum_length = 0;
-        pcb[i].check_point = 60 - 10 * i;
-        pcb[i].progress = 0;
+        if(i <= 5) {
+            pcb[i].is_plane = 1;
+            pcb[i].sum_length = 0;
+            pcb[i].check_point = 60 - 10 * i;
+            pcb[i].progress = 0;
+        }
+        else {
+            pcb[i].is_plane = 0;
+            pcb[i].sum_length = 0;
+            pcb[i].check_point = 0;
+            pcb[i].progress = 0;
+        }
         pcb[i].status = TASK_READY;
         LIST_APPEND(&pcb[i].list, &ready_queue);
         ptr_t entry_point = load_task_img(tasknames[i-1], tasks, tasknum);

@@ -24,7 +24,7 @@ LIST_HEAD(sleep_queue);
 pid_t process_id = 1;
 
 list_node_t *get_last_by_progress(list_head *head) { //descending
-    if(current_running->pid != 0) {
+    if(current_running->is_plane) {
         uint64_t sum_length = current_running->sum_length;
         uint64_t times = sum_length / 60;
         int remain_length = 60 - (sum_length % 60);
@@ -45,20 +45,40 @@ list_node_t *get_last_by_progress(list_head *head) { //descending
         return head->next;
     }
 
-    list_node_t *node, *next_node;
+    list_node_t *node, *next_node, *selected_node;
 
-    uint64_t min_progress = 0xFFFFFFFFFFFFFFFF;
-    list_node_t *min_progress_node = NULL;
-    for(node = LIST_FIRST(head); node != head; node = next_node) {
-        pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
-        next_node = node->next;
-        if(node_pcb->pid != 0 && node_pcb->progress < min_progress) {
-            min_progress = node_pcb->progress;
-            min_progress_node = node;
+
+    if(!current_running->is_plane) {
+        uint64_t min_progress = 0xFFFFFFFFFFFFFFFF;
+        list_node_t *min_progress_node = NULL;
+        for(node = LIST_FIRST(head); node != head; node = next_node) {
+            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+            next_node = node->next;
+            if(!node_pcb->is_plane) {
+                continue;
+            }
+            else if(node_pcb->pid != 0 && node_pcb->progress < min_progress) {
+                min_progress = node_pcb->progress;
+                min_progress_node = node;
+            }
+        }
+        selected_node = min_progress_node;
+    }
+    else {
+        for(node = LIST_FIRST(head); node != head; node = next_node) {
+            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+            next_node = node->next;
+            if(node_pcb->is_plane) {
+                continue;
+            }
+            else {
+                selected_node = node;
+                break;
+            }
         }
     }
 
-    return min_progress_node;
+    return selected_node;
 }
 
 void do_scheduler(void)
