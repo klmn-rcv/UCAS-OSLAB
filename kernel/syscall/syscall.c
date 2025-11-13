@@ -1,6 +1,8 @@
 #include <sys/syscall.h>
 
-long (*syscall[NUM_SYSCALLS])();
+#include <printk.h>
+
+long (*syscall[NUM_SYSCALLS])(long,long,long,long,long);
 
 void handle_syscall(regs_context_t *regs, uint64_t interrupt, uint64_t cause)
 {

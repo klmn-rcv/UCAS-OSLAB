@@ -27,26 +27,156 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
 
 #define SHELL_BEGIN 20
+#define MAX_CH 1024
+#define MAX_COMMANDS 96
+
+char buf[MAX_CH];
+int buf_sp = 0;
+char *commands[MAX_COMMANDS] = {"ps", "clear", "exec", "kill", "exit", "waitpid"};
+
+int try_parse_digit(char *str, char *command) {
+    int len = strlen(str);
+    
+    int parse_failed = 0;
+    if(len > 2 && str[0] == '0' && (str[1] == 'X' || str[1] == 'x')) {
+        for(int j = 2; j < len; j++) {
+            if(!isxdigit(str[j])) {
+                parse_failed = 1;
+            }
+        }
+    } else {
+        for(int j = 0; j < len; j++) {
+            if(!isdigit(str[j])) {
+                parse_failed = 1;
+            }
+        }
+    }
+    return parse_failed;
+}
 
 int main(void)
 {
+    sys_clear();
     sys_move_cursor(0, SHELL_BEGIN);
     printf("------------------- COMMAND -------------------\n");
-    printf("> root@UCAS_OS: ");
 
     while (1)
     {
         // TODO [P3-task1]: call syscall to read UART port
+        printf("> root@UCAS_OS: ");
+        memset(buf, 0, sizeof(buf));
+        buf_sp = 0;        
+        int ch;
+        while((ch = sys_getchar()) != '\n' && ch != '\r') {
+            if(ch == -1) {
+                continue;
+            }
+            else if(ch == '\b' || ch == 127) {
+                if(buf_sp > 0) {
+                    buf_sp--;
+                    buf[buf_sp] = '\0';
+                    printf("\b");
+                }
+                continue;
+            }
+            if(buf_sp >= MAX_CH) {
+                printf("Command is too loog\n");
+                continue;
+            }
+            buf[buf_sp++] = ch;
+            printf("%c", ch);
+        }
+        printf("\n");
         
         // TODO [P3-task1]: parse input
         // note: backspace maybe 8('\b') or 127(delete)
+        while(buf[buf_sp-1] == ' ') {
+            buf[buf_sp-1] = '\0';
+            buf_sp--;
+        }
+        int startpos;
+        for(startpos = 0; startpos < buf_sp && buf[startpos] == ' '; startpos++);
+        int in_word = 0;
+        int argc = 0;
+        char *argv[1024];
+        
+        for(int i = startpos; i < buf_sp; i++) {
+            if(buf[i] == ' ') {
+                in_word = 0;
+                buf[i] = '\0';
+            }
+            else {
+                if(in_word == 0) {
+                    argv[argc++] = buf + i;
+                }
+                in_word = 1;
+            }
+        }
 
+        if(argc == 0) continue;
+
+        //"ps", "clear", "exec", "kill", "exit", "waitpid"
         // TODO [P3-task1]: ps, exec, kill, clear    
+        if(strcmp(argv[0], "ps") == 0) {
+            sys_ps();
+        } else if(strcmp(argv[0], "clear") == 0) {
+            sys_clear();
+            sys_move_cursor(0, SHELL_BEGIN);
+            printf("------------------- COMMAND -------------------\n");
+        } else if(strcmp(argv[0], "exec") == 0) {
+            if(argc <= 1) {
+                printf("exec: too few arguments\n");
+            } else {
+                pid_t pid = sys_exec(argv[1], argc, argv);
+                if(pid == 0) {
+                    printf("ERROR: task not found\n");
+                    continue;
+                } else {
+                    printf("Info: execute %s successfully, pid = %d ...\n", argv[1], pid);
+                }
+                if(argc >= 3 && strcmp(argv[2], "&") == 0) {
+                    continue;
+                }
+                sys_waitpid(pid);
+            }
+        } else if(strcmp(argv[0], "kill") == 0) {
+            if(argc <= 1) {
+                printf("kill: too few arguments\n");
+            } else {
+                if(try_parse_digit(argv[1], argv[0])) {
+                    printf("kill: illegal argument: not a digit\n");
+                    continue;
+                } else {
+                    int success = sys_kill(atoi(argv[1]));
+                    if(!success) {
+                        printf("ERROR: PID not found\n");
+                    }
+                }
+            }
+        } else if(strcmp(argv[0], "exit") == 0) {
+            sys_exit();
+        } else if(strcmp(argv[0], "waitpid") == 0) {
+            if(argc <= 1) {
+                printf("waitpid: too few arguments\n");
+            } else {
+                if(try_parse_digit(argv[1], argv[0])) {
+                    continue;
+                } else {
+                    int success = sys_waitpid(atoi(argv[1]));
+                    if(!success) {
+                        printf("ERROR: PID not found\n");
+                    }
+                }
+            }
+        } else {
+            printf("%s: command not found\n", argv[0]);
+        }
 
         /************************************************************/
         /* Do not touch this comment. Reserved for future projects. */

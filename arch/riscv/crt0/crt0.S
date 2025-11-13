@@ -21,17 +21,18 @@ bss_clear_end:
     jal ra, main
 
     /* TODO: [p1-task3] finish task and return to the kernel, replace this in p3-task2! */
-    ;addi sp, sp, 16
     add sp, fp, zero
     ld fp, 0(sp)
     ld ra, 8(sp)
     addi sp, sp, 16
-    jalr zero, 0(ra)
+    //jalr zero, 0(ra)
 
 
     /************************************************************/
     /* TODO: [P3] call sys_exit */
     /************************************************************/
+    call sys_exit
+
 // while(1) loop, unreachable here
 loop:
     wfi

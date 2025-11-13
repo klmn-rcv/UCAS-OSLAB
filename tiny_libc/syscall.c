@@ -112,12 +112,6 @@ void sys_sleep(uint32_t time)
     invoke_syscall(SYSCALL_SLEEP, (long)time, 0, 0, 0, 0);
 }
 
-void sys_set_sche_workload(uint64_t sum_length)
-{
-    /* TODO: [p2-task3] call invoke_syscall to implement sys_sleep */
-    invoke_syscall(SYSCALL_SET_SCHE_WORKLOAD, (long)sum_length, 0, 0, 0, 0);
-}
-
 /************************************************************/
 #ifdef S_CORE
 pid_t  sys_exec(int id, int argc, uint64_t arg0, uint64_t arg1, uint64_t arg2)
@@ -128,38 +122,55 @@ pid_t  sys_exec(int id, int argc, uint64_t arg0, uint64_t arg1, uint64_t arg2)
 pid_t  sys_exec(char *name, int argc, char **argv)
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_exec */
+    pid_t pid = invoke_syscall(SYSCALL_EXEC, (long)name, (long)argc, (long)argv, 0, 0);
+    return pid;
 }
 #endif
 
 void sys_exit(void)
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_exit */
+    invoke_syscall(SYSCALL_EXIT, 0, 0, 0, 0, 0);
 }
 
 int  sys_kill(pid_t pid)
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_kill */
+    int success = invoke_syscall(SYSCALL_KILL, (long)pid, 0, 0, 0, 0);
+    return success;
 }
 
 int  sys_waitpid(pid_t pid)
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_waitpid */
+    int success = invoke_syscall(SYSCALL_WAITPID, (long)pid, 0, 0, 0, 0);
+    return success;
 }
 
 
 void sys_ps(void)
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_ps */
+    invoke_syscall(SYSCALL_PS, 0, 0, 0, 0, 0);
 }
 
 pid_t sys_getpid()
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_getpid */
+    pid_t pid = invoke_syscall(SYSCALL_GETPID, 0, 0, 0, 0, 0);
+    return pid;
 }
 
 int  sys_getchar(void)
 {
     /* TODO: [p3-task1] call invoke_syscall to implement sys_getchar */
+    int ch = invoke_syscall(SYSCALL_READCH, 0, 0, 0, 0, 0);
+    return ch;
+}
+
+void sys_clear(void)
+{
+    invoke_syscall(SYSCALL_CLEAR, 0, 0, 0, 0, 0);
 }
 
 int  sys_barrier_init(int key, int goal)

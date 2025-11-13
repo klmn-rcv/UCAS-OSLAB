@@ -36,7 +36,7 @@ typedef int BOOL;
 	#define FALSE 	0
 #endif
 
-typedef int bool;
+//typedef int bool;
 #ifndef true
     #define true   1
     #define false  0

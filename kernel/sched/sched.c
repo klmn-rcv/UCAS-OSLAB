@@ -3,11 +3,15 @@
 #include <os/sched.h>
 #include <os/time.h>
 #include <os/mm.h>
+#include <os/task.h>
+#include <os/string.h>
 #include <screen.h>
 #include <printk.h>
 #include <assert.h>
 
 #define LENGTH 60
+
+extern int create_task(char *taskname);
 
 pcb_t pcb[NUM_MAX_TASK];
 const ptr_t pid0_stack = INIT_KERNEL_STACK + PAGE_SIZE;
@@ -22,64 +26,6 @@ LIST_HEAD(sleep_queue);
 
 /* global process id */
 pid_t process_id = 1;
-
-list_node_t *get_last_by_progress(list_head *head) { //descending
-    if(current_running->is_plane) {
-        uint64_t sum_length = current_running->sum_length;
-        uint64_t times = sum_length / 60;
-        int remain_length = 60 - (sum_length % 60);
-        int check_point = current_running->check_point;
-        int this_process;
-        if (remain_length > check_point) {
-            this_process = 6000 - (6000 * (remain_length - check_point)) / (LENGTH - check_point);
-        } else {
-            this_process = 10000 - (4000 * remain_length) / check_point;
-        }
-        current_running->progress = 10000 * times + this_process;
-    }
-
-    if (LIST_EMPTY(head)) {
-        return NULL;
-    }
-    else if(head->next->next == head) {
-        return head->next;
-    }
-
-    list_node_t *node, *next_node, *selected_node;
-
-
-    if(!current_running->is_plane) {
-        uint64_t min_progress = 0xFFFFFFFFFFFFFFFF;
-        list_node_t *min_progress_node = NULL;
-        for(node = LIST_FIRST(head); node != head; node = next_node) {
-            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
-            next_node = node->next;
-            if(!node_pcb->is_plane) {
-                continue;
-            }
-            else if(node_pcb->pid != 0 && node_pcb->progress < min_progress) {
-                min_progress = node_pcb->progress;
-                min_progress_node = node;
-            }
-        }
-        selected_node = min_progress_node;
-    }
-    else {
-        for(node = LIST_FIRST(head); node != head; node = next_node) {
-            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
-            next_node = node->next;
-            if(node_pcb->is_plane) {
-                continue;
-            }
-            else {
-                selected_node = node;
-                break;
-            }
-        }
-    }
-
-    return selected_node;
-}
 
 void do_scheduler(void)
 {
@@ -99,7 +45,7 @@ void do_scheduler(void)
 
     if(!LIST_EMPTY(&ready_queue)) {
         pcb_t *prev_pcb = current_running;
-        list_node_t *next_node = get_last_by_progress(&ready_queue);
+        list_node_t *next_node = LIST_FIRST(&ready_queue);
         pcb_t *next_pcb = LIST_ENTRY(next_node, pcb_t, list);
 
         LIST_DELETE(next_node);
@@ -143,4 +89,115 @@ void do_unblock(list_node_t *pcb_node)
     pcb->status = TASK_READY;
     LIST_DELETE(pcb_node);
     LIST_APPEND(pcb_node, &ready_queue);
+}
+
+pid_t do_exec(char *name, int argc, char *argv[]) {
+    // ptr_t entry_point = load_task_img(name, tasks, tasknum);
+    // if(entry_point == 0) {  // task not found
+    //     return 0;
+    // }
+
+    // pcb[process_id].kernel_sp = (reg_t)allocKernelPage(3) + 3 * PAGE_SIZE;
+    // pcb[process_id].user_sp = (reg_t)allocUserPage(3) + 3 * PAGE_SIZE;
+    // pcb[process_id].pid = process_id;
+    // pcb[process_id].cursor_x = 0;
+    // pcb[process_id].cursor_y = 0;
+    // pcb[process_id].wakeup_time = 0;
+    // pcb[process_id].status = TASK_READY;
+    // LIST_APPEND(&pcb[process_id].list, &ready_queue);
+
+    // init_pcb_stack(pcb[process_id].kernel_sp, pcb[process_id].user_sp, entry_point, &pcb[process_id]);
+    // process_id++;
+    int pid = create_task(name);
+    if(pid == 0) return 0;  // task not found
+    
+    pcb[pid].user_sp -= (argc * sizeof(char *));
+
+    regs_context_t *pt_regs = (regs_context_t *)(pcb[pid].kernel_sp + sizeof(switchto_context_t));
+    pt_regs->regs[10] = (reg_t)argc;
+    pt_regs->regs[11] = (reg_t)pcb[pid].user_sp;
+
+    // for(int i = 0; i < argc; i++) {
+    //     *(char **)(pcb[pid].user_sp + i * sizeof(char *)) = argv[i];
+    // }
+
+    char **argv_to_user = (char **)pcb[pid].user_sp;
+
+    for(int i = 0; i < argc; i++) {
+        int len = strlen(argv[i]);
+        pcb[pid].user_sp -= (len + 1);
+        argv_to_user[i] = (char *)pcb[pid].user_sp;
+        
+        for(int j = 0; j < len; j++) {
+            *((char *)pcb[pid].user_sp + j) = argv[i][j];
+        }
+        *((char *)pcb[pid].user_sp + len) = '\0';
+    }
+
+    pcb[pid].user_sp &= 0xFFFFFFFFFFFFFFF0;
+
+    pt_regs->regs[2] = pcb[pid].user_sp;  // store sp back to user context
+    
+
+    LIST_APPEND(&pcb[pid].list, &ready_queue);
+
+    return pid;
+}
+
+static void clear_wait_list(pid_t pid) {
+    list_node_t *node, *next_node;
+    list_head *head = &pcb[pid].wait_list;
+    if(!LIST_EMPTY(head)) {
+        for(node = LIST_FIRST(head); node != head; node = next_node) {
+            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+            next_node = node->next;
+            LIST_DELETE(node);
+            LIST_APPEND(node, &ready_queue);
+        }
+    }
+}
+
+void do_exit(void) {
+    current_running->status = TASK_EXITED;
+    do_mutex_lock_free(current_running->pid);
+    clear_wait_list(current_running->pid);
+    do_scheduler();
+}
+
+int do_kill(pid_t pid) {
+    if(pid <= 0 || pid >= NUM_MAX_TASK || pcb[pid].status == TASK_EXITED) {
+        return 0;
+    }
+
+    pcb[pid].status = TASK_EXITED;
+    do_mutex_lock_free(pid);
+    clear_wait_list(pid);
+    LIST_DELETE(&pcb[pid].list);
+    if(current_running->pid == pid) {
+        do_scheduler();
+    }
+    return 1;
+}
+
+int do_waitpid(pid_t pid) {
+    if(pid <= 0 || pid >= NUM_MAX_TASK || pcb[pid].status == TASK_EXITED) {
+        return 0;
+    }
+    current_running->status = TASK_BLOCKED;
+    LIST_APPEND(&current_running->list, &pcb[pid].wait_list);
+    do_scheduler();
+}
+
+void do_process_show(void) {
+    char *status[3] = {"BLOCKED", "RUNNING", "READY"};
+    printk("[Process Table]\n");
+    for(int i = 1; i < NUM_MAX_TASK; i++) {
+        if(pcb[i].status != TASK_EXITED) {
+            printk("[%d] PID : %d  STATUS : %s\n", i - 1, pcb[i].pid, status[pcb[i].status]);
+        }
+    }
+}
+
+pid_t do_getpid(void) {
+    return (pid_t)current_running->pid;
 }

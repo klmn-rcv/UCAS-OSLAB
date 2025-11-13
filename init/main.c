@@ -17,13 +17,14 @@
 #include <type.h>
 #include <csr.h>
 
-#define TASK_NUM 12
+#define TASK_NUM 1
 
 extern void ret_from_exception();
 
 // Task info array
 task_info_t tasks[TASK_MAXNUM];
-
+static uint16_t tasknum;
+static uint32_t task_info_offset;
 
 static void init_jmptab(void)
 {
@@ -50,7 +51,7 @@ static void init_jmptab(void)
 
 }
 
-static void init_task_info(uint16_t tasknum, uint32_t task_info_offset)
+static void init_task_info(/*uint16_t tasknum, uint32_t task_info_offset*/)
 {
     // TODO: [p1-task4] Init 'tasks' array via reading app-info sector
     // NOTE: You need to get some related arguments from bootblock first
@@ -109,7 +110,39 @@ static void init_pcb_stack(
 
 }
 
-static void init_pcb(uint16_t tasknum)
+int create_task(char *taskname) {
+    ptr_t entry_point = load_task_img(taskname, tasks, tasknum);
+    if(entry_point == 0) {  // task not found
+        return 0;
+    }
+
+    int pid = 0;
+    for(int i = 1; i < NUM_MAX_TASK; i++) {
+        if(pcb[i].status == TASK_EXITED) {
+            pid = i;
+            break;
+        }
+    }
+    if(pid == 0) {
+        return 0;
+    }
+    
+    pcb[pid].kernel_sp = (reg_t)(pid * 3 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+    pcb[pid].user_sp = (reg_t)(pid * 3 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+    pcb[pid].kernel_stack_base = (reg_t)(pid + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+    pcb[pid].user_stack_base = (reg_t)(pid + ROUND(FREEMEM_USER, PAGE_SIZE));
+    LIST_INIT_HEAD(&pcb[pid].wait_list);
+    pcb[pid].pid = pid;
+    pcb[pid].cursor_x = 0;
+    pcb[pid].cursor_y = 0;
+    pcb[pid].wakeup_time = 0;
+    pcb[pid].status = TASK_READY;
+    // LIST_APPEND(&pcb[process_id].list, &ready_queue);
+    init_pcb_stack(pcb[pid].kernel_sp, pcb[pid].user_sp, entry_point, &pcb[pid]);
+    return pid;
+}
+
+static void init_pcb(/*uint16_t tasknum*/)
 {
     /* TODO: [p2-task1] load needed tasks and init their corresponding PCB */
 
@@ -118,41 +151,22 @@ static void init_pcb(uint16_t tasknum)
     for(int i = 1; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
         pcb[i].user_sp = 0;
+        pcb[i].kernel_stack_base = 0;
+        pcb[i].user_stack_base = 0;
+        LIST_INIT_HEAD(&pcb[i].wait_list);
         pcb[i].pid = i;
         pcb[i].status = TASK_EXITED;
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0;
         pcb[i].wakeup_time = 0;
-        pcb[i].is_plane = 0;
-        pcb[i].sum_length = 0;
-        pcb[i].check_point = 0;
-        pcb[i].progress = 0;
     }
 
-    char *tasknames[TASK_NUM] = {"fly1", "fly2", "fly3", "fly4", "fly5", "print1", "print2", "lock1", "lock2", "sleep", "timer", "fly"};
+    char *tasknames[TASK_NUM] = {"shell"};
     
-    for(int i = 1; i <= TASK_NUM; i++) {
-        pcb[i].kernel_sp = (reg_t)allocKernelPage(3) + 3 * PAGE_SIZE;
-        pcb[i].user_sp = (reg_t)allocUserPage(3) + 3 * PAGE_SIZE;
-        pcb[i].cursor_x = 0;
-        pcb[i].cursor_y = 0/*start_lines[i]*/;
-        pcb[i].wakeup_time = 0;
-        if(i <= 5) {
-            pcb[i].is_plane = 1;
-            pcb[i].sum_length = 0;
-            pcb[i].check_point = 60 - 10 * i;
-            pcb[i].progress = 0;
-        }
-        else {
-            pcb[i].is_plane = 0;
-            pcb[i].sum_length = 0;
-            pcb[i].check_point = 0;
-            pcb[i].progress = 0;
-        }
-        pcb[i].status = TASK_READY;
-        LIST_APPEND(&pcb[i].list, &ready_queue);
-        ptr_t entry_point = load_task_img(tasknames[i-1], tasks, tasknum);
-        init_pcb_stack(pcb[i].kernel_sp, pcb[i].user_sp, entry_point, &pcb[i]);
+    for(int i = 0; i < TASK_NUM; i++) {
+        int pid = create_task(tasknames[i]);
+        assert(pid);
+        LIST_APPEND(&pcb[pid].list, &ready_queue);
     }
 
     /* TODO: [p2-task1] remember to initialize 'current_running' */
@@ -161,39 +175,45 @@ static void init_pcb(uint16_t tasknum)
     asm volatile("mv tp, %0" : : "r"(current_running));
 }
 
-void set_sche_workload(uint64_t sum_length) {
-    current_running->sum_length = sum_length;
-}
 
 static void init_syscall(void)
 {
     // TODO: [p2-task3] initialize system call table.
-    syscall[SYSCALL_SLEEP]             = (long (*)())do_sleep;
-    syscall[SYSCALL_YIELD]             = (long (*)())do_scheduler;
-    syscall[SYSCALL_WRITE]             = (long (*)())screen_write;
-    syscall[SYSCALL_CURSOR]            = (long (*)())screen_move_cursor;
-    syscall[SYSCALL_REFLUSH]           = (long (*)())screen_reflush;
-    syscall[SYSCALL_GET_TIMEBASE]      = (long (*)())get_time_base;
-    syscall[SYSCALL_GET_TICK]          = (long (*)())get_ticks;
-    syscall[SYSCALL_LOCK_INIT]         = (long (*)())do_mutex_lock_init;
-    syscall[SYSCALL_LOCK_ACQ]          = (long (*)())do_mutex_lock_acquire;
-    syscall[SYSCALL_LOCK_RELEASE]      = (long (*)())do_mutex_lock_release;
-    syscall[SYSCALL_SET_SCHE_WORKLOAD] = (long (*)())set_sche_workload;
+    syscall[SYSCALL_EXEC]              = (long (*)(long,long,long,long,long))do_exec;
+    syscall[SYSCALL_EXIT]              = (long (*)(long,long,long,long,long))do_exit;
+    syscall[SYSCALL_SLEEP]             = (long (*)(long,long,long,long,long))do_sleep;
+    syscall[SYSCALL_KILL]              = (long (*)(long,long,long,long,long))do_kill;
+    syscall[SYSCALL_WAITPID]           = (long (*)(long,long,long,long,long))do_waitpid;
+    syscall[SYSCALL_PS]                = (long (*)(long,long,long,long,long))do_process_show;
+    syscall[SYSCALL_GETPID]            = (long (*)(long,long,long,long,long))do_getpid;
+    syscall[SYSCALL_YIELD]             = (long (*)(long,long,long,long,long))do_scheduler;
+    syscall[SYSCALL_WRITE]             = (long (*)(long,long,long,long,long))screen_write;
+    syscall[SYSCALL_READCH]            = (long (*)(long,long,long,long,long))bios_getchar;
+    syscall[SYSCALL_CURSOR]            = (long (*)(long,long,long,long,long))screen_move_cursor;
+    syscall[SYSCALL_REFLUSH]           = (long (*)(long,long,long,long,long))screen_reflush;
+    syscall[SYSCALL_CLEAR]             = (long (*)(long,long,long,long,long))screen_clear;
+    syscall[SYSCALL_GET_TIMEBASE]      = (long (*)(long,long,long,long,long))get_time_base;
+    syscall[SYSCALL_GET_TICK]          = (long (*)(long,long,long,long,long))get_ticks;
+    syscall[SYSCALL_LOCK_INIT]         = (long (*)(long,long,long,long,long))do_mutex_lock_init;
+    syscall[SYSCALL_LOCK_ACQ]          = (long (*)(long,long,long,long,long))do_mutex_lock_acquire;
+    syscall[SYSCALL_LOCK_RELEASE]      = (long (*)(long,long,long,long,long))do_mutex_lock_release;
 }
 /************************************************************/
 
 
 
-int main(uint16_t tasknum, uint32_t task_info_offset)
+int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 {
     // Init jump table provided by kernel and bios(ΦωΦ)
     init_jmptab();
 
     // Init task information (〃'▽'〃)
-    init_task_info(tasknum, task_info_offset);
+    tasknum = tasknum_arg;
+    task_info_offset = task_info_offset_arg;
+    init_task_info(/*tasknum, task_info_offset*/);
 
     // Init Process Control Blocks |•'-'•) ✧
-    init_pcb(tasknum);
+    init_pcb(/*tasknum*/);
     printk("> [INIT] PCB initialization succeeded.\n");
 
     // Read CPU frequency (｡•ᴗ-)_

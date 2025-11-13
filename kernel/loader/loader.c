@@ -19,11 +19,14 @@ uint64_t load_task_img(char *taskname, task_info_t tasks[], uint16_t tasknum)
 
     // p1-task4:
     task_info_t task_info;
+    int success = 0;
     for(uint16_t i = 0; i < tasknum; i++) {
         if(strcmp(tasks[i].taskname, taskname) == 0) {
             task_info = tasks[i];
+            success = 1;
         }
     }
+    if(!success) return 0;
     
     uint64_t entrypoint = task_info.taskid * 0x10000 + 0x52000000;
     unsigned begin_sector = NBYTES2SEC(task_info.offset) - 1;
