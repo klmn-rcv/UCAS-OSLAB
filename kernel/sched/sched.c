@@ -92,22 +92,6 @@ void do_unblock(list_node_t *pcb_node)
 }
 
 pid_t do_exec(char *name, int argc, char *argv[]) {
-    // ptr_t entry_point = load_task_img(name, tasks, tasknum);
-    // if(entry_point == 0) {  // task not found
-    //     return 0;
-    // }
-
-    // pcb[process_id].kernel_sp = (reg_t)allocKernelPage(3) + 3 * PAGE_SIZE;
-    // pcb[process_id].user_sp = (reg_t)allocUserPage(3) + 3 * PAGE_SIZE;
-    // pcb[process_id].pid = process_id;
-    // pcb[process_id].cursor_x = 0;
-    // pcb[process_id].cursor_y = 0;
-    // pcb[process_id].wakeup_time = 0;
-    // pcb[process_id].status = TASK_READY;
-    // LIST_APPEND(&pcb[process_id].list, &ready_queue);
-
-    // init_pcb_stack(pcb[process_id].kernel_sp, pcb[process_id].user_sp, entry_point, &pcb[process_id]);
-    // process_id++;
     int pid = create_task(name);
     if(pid == 0) return 0;  // task not found
     
@@ -116,10 +100,6 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
     regs_context_t *pt_regs = (regs_context_t *)(pcb[pid].kernel_sp + sizeof(switchto_context_t));
     pt_regs->regs[10] = (reg_t)argc;
     pt_regs->regs[11] = (reg_t)pcb[pid].user_sp;
-
-    // for(int i = 0; i < argc; i++) {
-    //     *(char **)(pcb[pid].user_sp + i * sizeof(char *)) = argv[i];
-    // }
 
     char **argv_to_user = (char **)pcb[pid].user_sp;
 

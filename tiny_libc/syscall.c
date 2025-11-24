@@ -173,44 +173,63 @@ void sys_clear(void)
     invoke_syscall(SYSCALL_CLEAR, 0, 0, 0, 0, 0);
 }
 
+#define SYSCALL_BARR_INIT 44
+#define SYSCALL_BARR_WAIT 45
+#define SYSCALL_BARR_DESTROY 46
+#define SYSCALL_COND_INIT 47
+#define SYSCALL_COND_WAIT 48
+#define SYSCALL_COND_SIGNAL 49
+#define SYSCALL_COND_BROADCAST 50
+#define SYSCALL_COND_DESTROY 51
+
 int  sys_barrier_init(int key, int goal)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_barrier_init */
+    int bar_idx = invoke_syscall(SYSCALL_BARR_INIT, (long)key, (long)goal, 0, 0, 0);
+    return bar_idx;
 }
 
 void sys_barrier_wait(int bar_idx)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_barrie_wait */
+    invoke_syscall(SYSCALL_BARR_WAIT, (long)bar_idx, 0, 0, 0, 0);
 }
 
 void sys_barrier_destroy(int bar_idx)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_barrie_destory */
+    invoke_syscall(SYSCALL_BARR_DESTROY, (long)bar_idx, 0, 0, 0, 0);
 }
 
 int sys_condition_init(int key)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_condition_init */
+    int cond_idx = invoke_syscall(SYSCALL_COND_INIT, (long)key, 0, 0, 0, 0);
+    return cond_idx;
 }
 
 void sys_condition_wait(int cond_idx, int mutex_idx)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_condition_wait */
+    invoke_syscall(SYSCALL_COND_WAIT, (long)cond_idx, (long)mutex_idx, 0, 0, 0);
 }
 
 void sys_condition_signal(int cond_idx)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_condition_signal */
+    invoke_syscall(SYSCALL_COND_SIGNAL, (long)cond_idx, 0, 0, 0, 0);
 }
 
 void sys_condition_broadcast(int cond_idx)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_condition_broadcast */
+    invoke_syscall(SYSCALL_COND_BROADCAST, (long)cond_idx, 0, 0, 0, 0);
 }
 
 void sys_condition_destroy(int cond_idx)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_condition_destroy */
+    invoke_syscall(SYSCALL_COND_DESTROY, (long)cond_idx, 0, 0, 0, 0);
 }
 
 int sys_semaphore_init(int key, int init)
@@ -236,20 +255,27 @@ void sys_semaphore_destroy(int sema_idx)
 int sys_mbox_open(char * name)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_open */
+    int mbox_idx = invoke_syscall(SYSCALL_MBOX_OPEN, (long)name, 0, 0, 0, 0);
+    return mbox_idx;
 }
 
 void sys_mbox_close(int mbox_id)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_close */
+    invoke_syscall(SYSCALL_MBOX_CLOSE, (long)mbox_id, 0, 0, 0, 0);
 }
 
 int sys_mbox_send(int mbox_idx, void *msg, int msg_length)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_send */
+    int ret = invoke_syscall(SYSCALL_MBOX_SEND, (long)mbox_idx, (long)msg, (long)msg_length, 0, 0);
+    return ret;
 }
 
 int sys_mbox_recv(int mbox_idx, void *msg, int msg_length)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_recv */
+    int ret = invoke_syscall(SYSCALL_MBOX_RECV, (long)mbox_idx, (long)msg, (long)msg_length, 0, 0);
+    return ret;
 }
 /************************************************************/

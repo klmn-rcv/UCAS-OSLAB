@@ -69,6 +69,10 @@ void do_mutex_lock_free(pid_t pid);
 typedef struct barrier
 {
     // TODO [P3-TASK2 barrier]
+    int key;
+    int total_count;
+    int current_count;
+    list_head wait_queue;
 } barrier_t;
 
 #define BARRIER_NUM 16
@@ -81,6 +85,8 @@ void do_barrier_destroy(int bar_idx);
 typedef struct condition
 {
     // TODO [P3-TASK2 condition]
+    int key;
+    list_head wait_queue;
 } condition_t;
 
 #define CONDITION_NUM 16
@@ -110,6 +116,13 @@ void do_semaphore_destroy(int sema_idx);
 typedef struct mailbox
 {
     // TODO [P3-TASK2 mailbox]
+    int using_num;
+    char name[32];
+    char message[MAX_MBOX_LENGTH + 1];
+    int head;
+    int tail;
+    list_head send_wait_queue;
+    list_head recv_wait_queue;
 } mailbox_t;
 
 #define MBOX_NUM 16

@@ -197,6 +197,18 @@ static void init_syscall(void)
     syscall[SYSCALL_LOCK_INIT]         = (long (*)(long,long,long,long,long))do_mutex_lock_init;
     syscall[SYSCALL_LOCK_ACQ]          = (long (*)(long,long,long,long,long))do_mutex_lock_acquire;
     syscall[SYSCALL_LOCK_RELEASE]      = (long (*)(long,long,long,long,long))do_mutex_lock_release;
+    syscall[SYSCALL_BARR_INIT]         = (long (*)(long,long,long,long,long))do_barrier_init;
+    syscall[SYSCALL_BARR_WAIT]         = (long (*)(long,long,long,long,long))do_barrier_wait;
+    syscall[SYSCALL_BARR_DESTROY]      = (long (*)(long,long,long,long,long))do_barrier_destroy;
+    syscall[SYSCALL_COND_INIT]         = (long (*)(long,long,long,long,long))do_condition_init;
+    syscall[SYSCALL_COND_WAIT]         = (long (*)(long,long,long,long,long))do_condition_wait;
+    syscall[SYSCALL_COND_SIGNAL]       = (long (*)(long,long,long,long,long))do_condition_signal;
+    syscall[SYSCALL_COND_BROADCAST]    = (long (*)(long,long,long,long,long))do_condition_broadcast;
+    syscall[SYSCALL_COND_DESTROY]      = (long (*)(long,long,long,long,long))do_condition_destroy;
+    syscall[SYSCALL_MBOX_OPEN]         = (long (*)(long,long,long,long,long))do_mbox_open;
+    syscall[SYSCALL_MBOX_CLOSE]        = (long (*)(long,long,long,long,long))do_mbox_close;
+    syscall[SYSCALL_MBOX_SEND]         = (long (*)(long,long,long,long,long))do_mbox_send;
+    syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
 }
 /************************************************************/
 
@@ -221,6 +233,9 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 
     // Init lock mechanism o(´^｀)o
     init_locks();
+    init_barriers();
+    init_conditions();
+    init_mbox();
     printk("> [INIT] Lock mechanism initialization succeeded.\n");
 
     // Init interrupt (^_^)
