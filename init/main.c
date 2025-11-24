@@ -138,6 +138,7 @@ int create_task(char *taskname) {
     pcb[pid].cursor_y = 0;
     pcb[pid].wakeup_time = 0;
     pcb[pid].status = TASK_READY;
+    pcb[pid].run_core_mask = current_running->run_core_mask;
     // LIST_APPEND(&pcb[process_id].list, &ready_queue);
     init_pcb_stack(pcb[pid].kernel_sp, pcb[pid].user_sp, entry_point, &pcb[pid]);
     return pid;
@@ -148,8 +149,10 @@ static void init_pcb(/*uint16_t tasknum*/)
     /* TODO: [p2-task1] load needed tasks and init their corresponding PCB */
 
     pcb[0] = pid0_pcb;
-
     pcb[1] = pid1_pcb;
+    pcb[0].status = TASK_RUNNING;
+    pcb[1].status = TASK_RUNNING;
+    current_running = &pcb[0];
     
     for(int i = 2; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
@@ -162,6 +165,8 @@ static void init_pcb(/*uint16_t tasknum*/)
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0;
         pcb[i].wakeup_time = 0;
+        pcb[i].run_core_mask = 0;
+        pcb[i].running_core_id = -1;
     }
 
     char *tasknames[TASK_NUM] = {"shell"};
@@ -173,9 +178,7 @@ static void init_pcb(/*uint16_t tasknum*/)
     }
 
     /* TODO: [p2-task1] remember to initialize 'current_running' */
-    pcb[0].status = TASK_RUNNING;
-    pcb[1].status = TASK_RUNNING;
-    current_running = &pcb[0];
+    
     // asm volatile("mv tp, %0" : : "r"(current_running));
 }
 
@@ -213,6 +216,8 @@ static void init_syscall(void)
     syscall[SYSCALL_MBOX_CLOSE]        = (long (*)(long,long,long,long,long))do_mbox_close;
     syscall[SYSCALL_MBOX_SEND]         = (long (*)(long,long,long,long,long))do_mbox_send;
     syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
+    syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
+    syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
 }
 /************************************************************/
 

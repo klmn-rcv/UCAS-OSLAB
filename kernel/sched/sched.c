@@ -5,6 +5,7 @@
 #include <os/mm.h>
 #include <os/task.h>
 #include <os/string.h>
+#include <os/smp.h>
 #include <screen.h>
 #include <printk.h>
 #include <assert.h>
@@ -18,13 +19,17 @@ const ptr_t pid0_stack = INIT_KERNEL_STACK + PAGE_SIZE;
 pcb_t pid0_pcb = {
     .pid = 0,
     .kernel_sp = (ptr_t)pid0_stack,
-    .user_sp = (ptr_t)pid0_stack
+    .user_sp = (ptr_t)pid0_stack,
+    .run_core_mask = 0x1,
+    .running_core_id = 0
 };
 const ptr_t pid1_stack = INIT_KERNEL_STACK + 2 * PAGE_SIZE;
 pcb_t pid1_pcb = {
     .pid = 1,
     .kernel_sp = (ptr_t)pid1_stack,
-    .user_sp = (ptr_t)pid1_stack
+    .user_sp = (ptr_t)pid1_stack,
+    .run_core_mask = 0x2,
+    .running_core_id = 1
 };
 
 LIST_HEAD(ready_queue);
@@ -32,6 +37,20 @@ LIST_HEAD(sleep_queue);
 
 /* global process id */
 pid_t process_id = 1;
+
+static list_node_t *find_next_node() {
+    list_node_t *node, *next_node, *result_node = NULL;
+    for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
+        next_node = node->next;
+        pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+        uint32_t cpu_mask = (1U << cpuid);
+        if(node_pcb->run_core_mask & cpu_mask) {
+            result_node = node;
+            break;
+        }
+    }
+    return result_node;
+}
 
 void do_scheduler(void)
 {
@@ -51,16 +70,55 @@ void do_scheduler(void)
 
     if(!LIST_EMPTY(&ready_queue)) {
         pcb_t *prev_pcb = current_running;
-        list_node_t *next_node = LIST_FIRST(&ready_queue);
+        // list_node_t *next_node = LIST_FIRST(&ready_queue);
+
+        list_node_t *next_node = find_next_node();
+        // if(next_node == NULL) {
+        //     printl("Here: cpuid: %d\n", cpuid);
+        //     list_node_t *node, *next_node;
+        //     int i = 0;
+        //     for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
+        //         next_node = node->next;
+        //         pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+        //         //uint32_t cpu_mask = (1U << cpuid);
+        //         printl("[%d] pid = %d, mask = %x\n", i, node_pcb->pid, node_pcb->run_core_mask);
+        //         i++;
+        //     }
+        // } else {
+        //     printl("Here 2: cpuid: %d\n", cpuid);
+        //     pcb_t *next_node_pcb = LIST_ENTRY(next_node, pcb_t, list);
+        //     printl("NEXT: pid = %d, mask = %x\n", next_node_pcb->pid, next_node_pcb->run_core_mask);
+        // }
+        // if(cpuid == 0) {
+        //     assert(next_node);
+        // }
+
+        // printl("Here: cpuid: %d, current pid: %d\n", cpuid, current_running->pid);
+        // list_node_t *node, *n_node;
+        // int i = 0;
+        // for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = n_node) {
+        //     n_node = node->next;
+        //     pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+        //     //uint32_t cpu_mask = (1U << cpuid);
+        //     printl("[%d] pid = %d, mask = %x\n", i, node_pcb->pid, node_pcb->run_core_mask);
+        //     i++;
+        // }
+
+        // assert(next_node);
+        if(next_node == NULL) {
+            next_node = &current_running->list;
+        }
+
         pcb_t *next_pcb = LIST_ENTRY(next_node, pcb_t, list);
 
         LIST_DELETE(next_node);
 
         next_pcb->status = TASK_RUNNING;
+        next_pcb->running_core_id = cpuid;
         current_running = next_pcb;
-        asm volatile("mv tp, %0" : : "r"(current_running));
+        // asm volatile("mv tp, %0" : : "r"(current_running));
 
-    // TODO: [p2-task1] switch_to current_running
+        // TODO: [p2-task1] switch_to current_running
 
         switch_to(prev_pcb, next_pcb);
     }
@@ -100,8 +158,10 @@ void do_unblock(list_node_t *pcb_node)
 pid_t do_exec(char *name, int argc, char *argv[]) {
     int pid = create_task(name);
     if(pid == 0) return 0;  // task not found
-    
-    pcb[pid].user_sp -= (argc * sizeof(char *));
+
+    // uint32_t mask = current_running->run_core_mask;
+    // pcb[pid].run_core_mask = mask;
+    // pcb[pid].user_sp -= (argc * sizeof(char *));
 
     regs_context_t *pt_regs = (regs_context_t *)(pcb[pid].kernel_sp + sizeof(switchto_context_t));
     pt_regs->regs[10] = (reg_t)argc;
@@ -181,11 +241,36 @@ void do_process_show(void) {
     printk("[Process Table]\n");
     for(int i = 2; i < NUM_MAX_TASK; i++) {
         if(pcb[i].status != TASK_EXITED) {
-            printk("[%d] PID : %d  STATUS : %s\n", i - 2, pcb[i].pid, status[pcb[i].status]);
+            printk("[%d] PID : %d  STATUS : %s mask: %x", i - 2, pcb[i].pid, status[pcb[i].status], pcb[i].run_core_mask);
+            if(pcb[i].status == TASK_RUNNING) {
+                printk(" Running on core %d\n", pcb[i].running_core_id);
+            } else {
+                printk("\n");
+            }
         }
     }
 }
 
 pid_t do_getpid(void) {
     return (pid_t)current_running->pid;
+}
+
+pid_t do_taskset(uint32_t mask, char *taskname) {
+    // printk("mask: %u, taskname: %s\n", mask, taskname);
+    char *argv[1] = {taskname};
+    pid_t pid = do_exec(taskname, 1, argv);
+    if(pid == 0) {
+        return 0;
+    }
+    pcb[pid].run_core_mask = mask;
+}
+
+int do_taskset_p(uint32_t mask, pid_t pid) {
+    // printk("mask: %u, pid: %d\n", mask, pid);
+    if(pid <= 0 || pid >= NUM_MAX_TASK || pcb[pid].status == TASK_EXITED) {
+        return 0;
+    }
+
+    pcb[pid].run_core_mask = mask;
+    return 1;
 }

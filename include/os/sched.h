@@ -88,6 +88,9 @@ typedef struct pcb
     /* time(seconds) to wake up sleeping PCB */
     uint64_t wakeup_time;
 
+    uint32_t run_core_mask;
+    int running_core_id;
+
 } pcb_t;
 
 /* ready queue to run */
@@ -125,6 +128,8 @@ extern int do_kill(pid_t pid);
 extern int do_waitpid(pid_t pid);
 extern void do_process_show();
 extern pid_t do_getpid();
+extern pid_t do_taskset(uint32_t mask, char *taskname);
+extern int do_taskset_p(uint32_t mask, pid_t pid);
 /************************************************************/
 
 #endif

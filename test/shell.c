@@ -38,7 +38,7 @@
 
 char buf[MAX_CH];
 int buf_sp = 0;
-char *commands[MAX_COMMANDS] = {"ps", "clear", "exec", "kill", "exit", "waitpid"};
+char *commands[MAX_COMMANDS] = {"ps", "clear", "exec", "kill", "exit", "waitpid", "taskset"};
 
 int try_parse_digit(char *str, char *command) {
     int len = strlen(str);
@@ -172,6 +172,34 @@ int main(void)
                     if(!success) {
                         printf("ERROR: PID not found\n");
                     }
+                }
+            }
+        } else if(strcmp(argv[0], "taskset") == 0) {
+            if(argc <= 1) {
+                printf("taskset: too few arguments\n");
+                continue;
+            }
+            if(strcmp(argv[1], "-p") == 0) {
+                if(argc < 4) {
+                    printf("taskset: too few arguments\n");
+                    continue;
+                }
+                uint32_t mask = atoi(argv[2]);
+                pid_t pid = atoi(argv[3]);
+                int success = sys_taskset_p(mask, pid);
+                if(!success) {
+                    printf("ERROR: PID not found\n");
+                }
+            } else {
+                if(argc < 3) {
+                    printf("taskset: too few arguments\n");
+                    continue;
+                }
+                uint32_t mask = atoi(argv[1]);
+                pid_t pid = sys_taskset(mask, argv[2]);
+                if(pid == 0) {
+                    printf("ERROR: task not found\n");
+                    continue;
                 }
             }
         } else {

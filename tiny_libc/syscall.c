@@ -173,15 +173,6 @@ void sys_clear(void)
     invoke_syscall(SYSCALL_CLEAR, 0, 0, 0, 0, 0);
 }
 
-#define SYSCALL_BARR_INIT 44
-#define SYSCALL_BARR_WAIT 45
-#define SYSCALL_BARR_DESTROY 46
-#define SYSCALL_COND_INIT 47
-#define SYSCALL_COND_WAIT 48
-#define SYSCALL_COND_SIGNAL 49
-#define SYSCALL_COND_BROADCAST 50
-#define SYSCALL_COND_DESTROY 51
-
 int  sys_barrier_init(int key, int goal)
 {
     /* TODO: [p3-task2] call invoke_syscall to implement sys_barrier_init */
@@ -277,5 +268,19 @@ int sys_mbox_recv(int mbox_idx, void *msg, int msg_length)
     /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_recv */
     int ret = invoke_syscall(SYSCALL_MBOX_RECV, (long)mbox_idx, (long)msg, (long)msg_length, 0, 0);
     return ret;
+}
+
+pid_t sys_taskset(uint32_t mask, char *taskname)
+{
+    /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_recv */
+    pid_t pid = invoke_syscall(SYSCALL_TASKSET, (long)mask, (long)taskname, 0, 0, 0);
+    return pid;
+}
+
+int sys_taskset_p(uint32_t mask, pid_t pid)
+{
+    /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_recv */
+    int success = invoke_syscall(SYSCALL_TASKSET_P, (long)mask, (long)pid, 0, 0, 0);
+    return success;
 }
 /************************************************************/

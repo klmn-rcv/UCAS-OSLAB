@@ -52,6 +52,9 @@ int sys_mbox_open(char * name);
 void sys_mbox_close(int mbox_id);
 int sys_mbox_send(int mbox_idx, void *msg, int msg_length);
 int sys_mbox_recv(int mbox_idx, void *msg, int msg_length);
+
+pid_t sys_taskset(uint32_t mask, char *taskname);
+int sys_taskset_p(uint32_t mask, pid_t pid);
 /************************************************************/
 
 #endif
