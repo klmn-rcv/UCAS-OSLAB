@@ -53,6 +53,8 @@ typedef struct mutex_lock
     int using_pid;
 } mutex_lock_t;
 
+extern spin_lock_t kernel_lock;
+
 void init_locks(void);
 
 void spin_lock_init(spin_lock_t *lock);

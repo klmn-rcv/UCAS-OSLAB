@@ -10,6 +10,7 @@
 #include <os/string.h>
 #include <os/mm.h>
 #include <os/time.h>
+#include <os/smp.h>
 #include <sys/syscall.h>
 #include <screen.h>
 #include <printk.h>
@@ -117,7 +118,7 @@ int create_task(char *taskname) {
     }
 
     int pid = 0;
-    for(int i = 1; i < NUM_MAX_TASK; i++) {
+    for(int i = 2; i < NUM_MAX_TASK; i++) {
         if(pcb[i].status == TASK_EXITED) {
             pid = i;
             break;
@@ -147,8 +148,10 @@ static void init_pcb(/*uint16_t tasknum*/)
     /* TODO: [p2-task1] load needed tasks and init their corresponding PCB */
 
     pcb[0] = pid0_pcb;
+
+    pcb[1] = pid1_pcb;
     
-    for(int i = 1; i < NUM_MAX_TASK; i++) {
+    for(int i = 2; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
         pcb[i].user_sp = 0;
         pcb[i].kernel_stack_base = 0;
@@ -171,8 +174,9 @@ static void init_pcb(/*uint16_t tasknum*/)
 
     /* TODO: [p2-task1] remember to initialize 'current_running' */
     pcb[0].status = TASK_RUNNING;
+    pcb[1].status = TASK_RUNNING;
     current_running = &pcb[0];
-    asm volatile("mv tp, %0" : : "r"(current_running));
+    // asm volatile("mv tp, %0" : : "r"(current_running));
 }
 
 
@@ -216,42 +220,55 @@ static void init_syscall(void)
 
 int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 {
-    // Init jump table provided by kernel and bios(ΦωΦ)
-    init_jmptab();
+    cpuid = get_current_cpu_id();
 
-    // Init task information (〃'▽'〃)
-    tasknum = tasknum_arg;
-    task_info_offset = task_info_offset_arg;
-    init_task_info(/*tasknum, task_info_offset*/);
+    if(cpuid == 0) {
+        // Init jump table provided by kernel and bios(ΦωΦ)
+        init_jmptab();
 
-    // Init Process Control Blocks |•'-'•) ✧
-    init_pcb(/*tasknum*/);
-    printk("> [INIT] PCB initialization succeeded.\n");
+        // Init task information (〃'▽'〃)
+        tasknum = tasknum_arg;
+        task_info_offset = task_info_offset_arg;
+        init_task_info(/*tasknum, task_info_offset*/);
 
-    // Read CPU frequency (｡•ᴗ-)_
-    time_base = bios_read_fdt(TIMEBASE);
+        // Init Process Control Blocks |•'-'•) ✧
+        init_pcb(/*tasknum*/);
+        printk("> [INIT] PCB initialization succeeded.\n");
 
-    // Init lock mechanism o(´^｀)o
-    init_locks();
-    init_barriers();
-    init_conditions();
-    init_mbox();
-    printk("> [INIT] Lock mechanism initialization succeeded.\n");
+        // Read CPU frequency (｡•ᴗ-)_
+        time_base = bios_read_fdt(TIMEBASE);
 
-    // Init interrupt (^_^)
-    init_exception();
-    printk("> [INIT] Interrupt processing initialization succeeded.\n");
+        // Init lock mechanism o(´^｀)o
+        init_locks();
+        init_barriers();
+        init_conditions();
+        init_mbox();
+        printk("> [INIT] Lock mechanism initialization succeeded.\n");
 
-    // Init system call table (0_0)
-    init_syscall();
-    printk("> [INIT] System call initialized successfully.\n");
+        // Init interrupt (^_^)
+        init_exception();
+        printk("> [INIT] Interrupt processing initialization succeeded.\n");
 
-    // Init screen (QAQ)
-    init_screen();
-    printk("> [INIT] SCREEN initialization succeeded.\n");
+        // Init system call table (0_0)
+        init_syscall();
+        printk("> [INIT] System call initialized successfully.\n");
+
+        // Init screen (QAQ)
+        init_screen();
+        printk("> [INIT] SCREEN initialization succeeded.\n");
+
+        // printl("Here 1, cpuid: %d\n", cpuid);
+        wakeup_other_hart();
+    }
+    else {
+        // printl("Here 2, cpuid: %d\n", cpuid);
+        current_running = &pcb[1];
+        current_running->status = TASK_RUNNING;
+    }
 
     // TODO: [p2-task4] Setup timer interrupt and enable all interrupt globally
     // NOTE: The function of sstatus.sie is different from sie's
+    setup_exception();
     uint64_t current_time = get_ticks();
     bios_set_timer(current_time + TIMER_INTERVAL);
 

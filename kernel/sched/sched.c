@@ -20,6 +20,12 @@ pcb_t pid0_pcb = {
     .kernel_sp = (ptr_t)pid0_stack,
     .user_sp = (ptr_t)pid0_stack
 };
+const ptr_t pid1_stack = INIT_KERNEL_STACK + 2 * PAGE_SIZE;
+pcb_t pid1_pcb = {
+    .pid = 1,
+    .kernel_sp = (ptr_t)pid1_stack,
+    .user_sp = (ptr_t)pid1_stack
+};
 
 LIST_HEAD(ready_queue);
 LIST_HEAD(sleep_queue);
@@ -133,6 +139,7 @@ static void clear_wait_list(pid_t pid) {
             next_node = node->next;
             LIST_DELETE(node);
             LIST_APPEND(node, &ready_queue);
+            node_pcb->status = TASK_READY;
         }
     }
 }
@@ -166,14 +173,15 @@ int do_waitpid(pid_t pid) {
     current_running->status = TASK_BLOCKED;
     LIST_APPEND(&current_running->list, &pcb[pid].wait_list);
     do_scheduler();
+    return 1;
 }
 
 void do_process_show(void) {
     char *status[3] = {"BLOCKED", "RUNNING", "READY"};
     printk("[Process Table]\n");
-    for(int i = 1; i < NUM_MAX_TASK; i++) {
+    for(int i = 2; i < NUM_MAX_TASK; i++) {
         if(pcb[i].status != TASK_EXITED) {
-            printk("[%d] PID : %d  STATUS : %s\n", i - 1, pcb[i].pid, status[pcb[i].status]);
+            printk("[%d] PID : %d  STATUS : %s\n", i - 2, pcb[i].pid, status[pcb[i].status]);
         }
     }
 }

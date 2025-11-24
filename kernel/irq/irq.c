@@ -61,7 +61,7 @@ void init_exception()
     irq_table[IRQC_M_EXT]   = handle_other;
 
     /* TODO: [p2-task3] set up the entrypoint of exceptions */
-    setup_exception();
+    // setup_exception();
 }
 
 void handle_other(regs_context_t *regs, uint64_t stval, uint64_t scause)

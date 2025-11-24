@@ -1,4 +1,5 @@
 #include <asm/biosdef.h>
+#include <csr.h>
 
 // os size location (os_size could be sectors [p1-task3] or bytes [p1-task4])
 .equ os_size_loc, 0x502001fc
@@ -54,6 +55,17 @@ secondary:
 	 * 2. let stvec pointer to kernel_main
 	 * 3. enable software interrupt for ipi
 	 */
+	li t0, SR_SIE
+    csrc CSR_SSTATUS, t0
+	
+	li t0, kernel
+	csrw stvec, t0
+
+	li t0, SIE_SSIE
+	csrs CSR_SIE, t0
+
+	li t0, SR_SIE
+    csrs CSR_SSTATUS, t0
 
 wait_for_wakeup:
 	wfi

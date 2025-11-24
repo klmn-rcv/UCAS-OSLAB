@@ -6,6 +6,8 @@
 #include <printk.h>
 #include <assert.h>
 
+spin_lock_t kernel_lock;
+
 static void clear_wait_queue(list_head *queue) {
     if(!LIST_EMPTY(queue)) {
         list_node_t *node, *next_node;
@@ -37,6 +39,7 @@ void init_locks(void)
 void spin_lock_init(spin_lock_t *lock)
 {
     /* TODO: [p2-task2] initialize spin lock */
+    lock->status = UNLOCKED;
 }
 
 int spin_lock_try_acquire(spin_lock_t *lock)
@@ -48,11 +51,14 @@ int spin_lock_try_acquire(spin_lock_t *lock)
 void spin_lock_acquire(spin_lock_t *lock)
 {
     /* TODO: [p2-task2] acquire spin lock */
+    while(atomic_swap((uint32_t)LOCKED, (ptr_t)&lock->status))
+        ;
 }
 
 void spin_lock_release(spin_lock_t *lock)
 {
     /* TODO: [p2-task2] release spin lock */
+    lock->status = UNLOCKED;
 }
 
 int do_mutex_lock_init(int key)

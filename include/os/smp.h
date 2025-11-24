@@ -2,6 +2,9 @@
 #define SMP_H
 
 #define NR_CPUS 2
+
+extern uint64_t cpuid;
+
 extern void smp_init();
 extern void wakeup_other_hart();
 extern uint64_t get_current_cpu_id();
