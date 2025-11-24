@@ -3,6 +3,7 @@
 #include <os/sched.h>
 #include <os/string.h>
 #include <os/kernel.h>
+#include <os/smp.h>
 #include <printk.h>
 #include <assert.h>
 #include <screen.h>
@@ -15,6 +16,7 @@ handler_t exc_table[EXCC_COUNT];
 
 void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
 {
+    cpuid = get_current_cpu_id();
     // TODO: [p2-task3] & [p2-task4] interrupt handler.
     // call corresponding handler by the value of `scause`
     if(scause == (SCAUSE_IRQ_FLAG | IRQC_S_TIMER)) {
