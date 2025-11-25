@@ -125,6 +125,8 @@ typedef struct mailbox
     int tail;
     list_head send_wait_queue;
     list_head recv_wait_queue;
+    mutex_lock_t write_lock;
+    mutex_lock_t read_lock;
 } mailbox_t;
 
 #define MBOX_NUM 16

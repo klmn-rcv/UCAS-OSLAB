@@ -67,7 +67,7 @@ static void init_task_info(/*uint16_t tasknum, uint32_t task_info_offset*/)
 }
 
 /************************************************************/
-static void init_pcb_stack(
+void init_pcb_stack(
     ptr_t kernel_stack, ptr_t user_stack, ptr_t entry_point,
     pcb_t *pcb)
 {
@@ -128,17 +128,21 @@ int create_task(char *taskname) {
         return 0;
     }
     
-    pcb[pid].kernel_sp = (reg_t)(pid * 3 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
-    pcb[pid].user_sp = (reg_t)(pid * 3 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
-    pcb[pid].kernel_stack_base = (reg_t)(pid + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
-    pcb[pid].user_stack_base = (reg_t)(pid + ROUND(FREEMEM_USER, PAGE_SIZE));
+    pcb[pid].kernel_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+    pcb[pid].user_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+    pcb[pid].kernel_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+    pcb[pid].user_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
     LIST_INIT_HEAD(&pcb[pid].wait_list);
     pcb[pid].pid = pid;
+    pcb[pid].is_thread = 0;
+    pcb[pid].tid = -1;
     pcb[pid].cursor_x = 0;
     pcb[pid].cursor_y = 0;
     pcb[pid].wakeup_time = 0;
     pcb[pid].status = TASK_READY;
-    pcb[pid].run_core_mask = current_running->run_core_mask;
+    //pcb[pid].run_core_mask = current_running->run_core_mask;
+    pcb[pid].run_core_mask = 0x3;
+    
     // LIST_APPEND(&pcb[process_id].list, &ready_queue);
     init_pcb_stack(pcb[pid].kernel_sp, pcb[pid].user_sp, entry_point, &pcb[pid]);
     return pid;
@@ -161,6 +165,8 @@ static void init_pcb(/*uint16_t tasknum*/)
         pcb[i].user_stack_base = 0;
         LIST_INIT_HEAD(&pcb[i].wait_list);
         pcb[i].pid = i;
+        pcb[i].is_thread = 0;
+        pcb[i].tid = -1;
         pcb[i].status = TASK_EXITED;
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0;
@@ -178,8 +184,26 @@ static void init_pcb(/*uint16_t tasknum*/)
     }
 
     /* TODO: [p2-task1] remember to initialize 'current_running' */
-    
-    // asm volatile("mv tp, %0" : : "r"(current_running));
+}
+
+
+static void init_tcb() {
+    for(int i = 0; i < NUM_MAX_TASK; i++) {
+        tcb[i].kernel_sp = 0;
+        tcb[i].user_sp = 0;
+        tcb[i].kernel_stack_base = 0;
+        tcb[i].user_stack_base = 0;
+        LIST_INIT_HEAD(&tcb[i].wait_list);
+        tcb[i].pid = 0;
+        tcb[i].is_thread = 1;
+        tcb[i].tid = i;
+        tcb[i].status = TASK_EXITED;
+        tcb[i].cursor_x = 0;
+        tcb[i].cursor_y = 0;
+        tcb[i].wakeup_time = 0;
+        tcb[i].run_core_mask = 0;
+        tcb[i].running_core_id = -1;
+    }
 }
 
 
@@ -218,6 +242,9 @@ static void init_syscall(void)
     syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
     syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
     syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
+    syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
+    syscall[SYSCALL_THREAD_JOIN]       = (long (*)(long,long,long,long,long))do_thread_join;
+    syscall[SYSCALL_THREAD_EXIT]       = (long (*)(long,long,long,long,long))do_thread_exit;
 }
 /************************************************************/
 
@@ -238,7 +265,8 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 
         // Init Process Control Blocks |•'-'•) ✧
         init_pcb(/*tasknum*/);
-        printk("> [INIT] PCB initialization succeeded.\n");
+        init_tcb();
+        printk("> [INIT] PCB and TCB initialization succeeded.\n");
 
         // Read CPU frequency (｡•ᴗ-)_
         time_base = bios_read_fdt(TIMEBASE);

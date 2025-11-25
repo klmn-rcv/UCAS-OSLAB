@@ -1,0 +1,131 @@
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <mailbox.h>
+
+#include <assert.h>
+
+#define MBOX_NAME1 "mbox1"
+#define MBOX_NAME2 "mbox2"
+#define MSG_SIZE 64
+
+static int print_location = 3;
+static char blank[] = {"                                             "};
+
+void myPrintf(char *str) {
+    sys_move_cursor(0, print_location);
+    printf("%s\n", blank);
+    sys_move_cursor(0, print_location);
+    printf("%s", str);
+}
+
+void *send(void *arg) {
+    int *mbox_p = (int *)arg;
+    char send_buf[MSG_SIZE];
+    int send_length;
+
+    while(1) {
+        send_length = rand() % MSG_SIZE + 1;
+        generateRandomString(send_buf, send_length);
+        myPrintf("[Process B] Trying to send to mbox2...\n");
+        sys_mbox_send(*mbox_p, send_buf, send_length);
+        myPrintf("[Process B] Sent to mbox2\n");
+    }
+
+    sys_thread_exit();
+    return NULL;
+}
+
+void *recv(void *arg) {
+    int *mbox_p = (int *)arg;
+    char recv_buf[MSG_SIZE];
+    int recv_length;
+
+    while(1) {
+        recv_length = rand() % MSG_SIZE + 1;
+        myPrintf("[Process B] Trying to recv from mbox1...\n");
+        sys_mbox_recv(*mbox_p, recv_buf, recv_length);
+        myPrintf("[Process B] Received from mbox1\n");
+    }
+
+    sys_thread_exit();
+    return NULL;
+}
+
+int main() {
+    sys_move_cursor(0, print_location);
+    printf("[Process B] Starting...\n");
+    
+    int mbox1 = sys_mbox_open(MBOX_NAME1);
+    int mbox2 = sys_mbox_open(MBOX_NAME2);
+
+    tid_t tid_send = sys_thread_create((void *)send, (void *)&mbox2);
+    tid_t tid_recv = sys_thread_create((void *)recv, (void *)&mbox1);
+
+    sys_thread_join(tid_send);
+    sys_thread_join(tid_recv);
+    
+    sys_mbox_close(mbox1);
+    sys_mbox_close(mbox2);
+    sys_move_cursor(0, print_location);
+    printf("%s\n", blank);
+    sys_move_cursor(0, print_location);
+    printf("[Process B] Finished\n");
+    return 0;
+}
+
+
+// #include <unistd.h>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <string.h>
+// #include <mailbox.h>
+
+// #define MBOX_NAME1 "mbox1"
+// #define MBOX_NAME2 "mbox2"
+// #define MSG_SIZE 64
+
+// static int print_location = 3;
+// static char blank[] = {"                                             "};
+
+// void myPrintf(char *str) {
+//     sys_move_cursor(0, print_location);
+//     printf("%s\n", blank);
+//     sys_move_cursor(0, print_location);
+//     printf("%s", str);
+// }
+
+// int main() {
+//     sys_move_cursor(0, print_location);
+//     printf("[Process B] Starting...\n");
+    
+//     int mbox1 = sys_mbox_open(MBOX_NAME1);
+//     int mbox2 = sys_mbox_open(MBOX_NAME2);
+
+//     char send_buf[MSG_SIZE];
+//     int send_length;
+//     char recv_buf[MSG_SIZE];
+//     int recv_length;
+
+//     for(int i = 0; i < 10; i++) {
+//         send_length = rand() % MSG_SIZE + 1;
+//         generateRandomString(send_buf, send_length);
+//         myPrintf("[Process B] Trying to send to mbox2...\n");
+//         sys_mbox_send(mbox2, send_buf, send_length);
+//         myPrintf("[Process B] Sent to mbox2\n");
+
+//         recv_length = rand() % MSG_SIZE + 1;
+//         myPrintf("[Process B] Trying to recv from mbox1...\n");
+//         sys_mbox_recv(mbox1, recv_buf, recv_length);
+//         myPrintf("[Process B] Received from mbox1\n");
+//     }
+    
+//     sys_mbox_close(mbox1);
+//     sys_mbox_close(mbox2);
+//     sys_move_cursor(0, print_location);
+//     printf("%s\n", blank);
+//     sys_move_cursor(0, print_location);
+//     printf("[Process B] Finished\n");
+//     return 0;
+// }

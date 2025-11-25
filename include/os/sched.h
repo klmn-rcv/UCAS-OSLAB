@@ -78,6 +78,9 @@ typedef struct pcb
     /* process id */
     pid_t pid;
 
+    int is_thread;
+    tid_t tid;
+
     /* BLOCK | READY | RUNNING */
     task_status_t status;
 
@@ -93,6 +96,39 @@ typedef struct pcb
 
 } pcb_t;
 
+/* Thread Control Block */
+// typedef struct tcb
+// {
+//     /* register context */
+//     // NOTE: this order must be preserved, which is defined in regs.h!!
+//     reg_t kernel_sp;
+//     reg_t user_sp;
+//     ptr_t kernel_stack_base;
+//     ptr_t user_stack_base;
+
+//     /* previous, next pointer */
+//     list_node_t list;
+//     list_head wait_list;
+
+//     /* process id */
+//     tid_t tid;
+//     pid_t parent_pid;
+
+//     /* BLOCK | READY | RUNNING */
+//     task_status_t status;
+
+//     /* cursor position */
+//     int cursor_x;
+//     int cursor_y;
+
+//     /* time(seconds) to wake up sleeping PCB */
+//     uint64_t wakeup_time;
+
+//     uint32_t run_core_mask;
+//     int running_core_id;
+
+// } tcb_t;
+
 /* ready queue to run */
 extern list_head ready_queue;
 
@@ -104,6 +140,7 @@ register pcb_t * current_running asm("tp");
 extern pid_t process_id;
 
 extern pcb_t pcb[NUM_MAX_TASK];
+extern pcb_t tcb[NUM_MAX_TASK];
 extern pcb_t pid0_pcb;
 extern pcb_t pid1_pcb;
 extern const ptr_t pid0_stack;
@@ -130,6 +167,9 @@ extern void do_process_show();
 extern pid_t do_getpid();
 extern pid_t do_taskset(uint32_t mask, char *taskname);
 extern int do_taskset_p(uint32_t mask, pid_t pid);
+extern tid_t do_thread_create(void *func, void *arg);
+extern void do_thread_join(tid_t tid);
+extern void do_thread_exit();
 /************************************************************/
 
 #endif

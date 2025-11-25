@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 typedef int32_t pid_t;
+typedef int32_t tid_t;
 
 
 void sys_sleep(uint32_t time);
@@ -55,6 +56,10 @@ int sys_mbox_recv(int mbox_idx, void *msg, int msg_length);
 
 pid_t sys_taskset(uint32_t mask, char *taskname);
 int sys_taskset_p(uint32_t mask, pid_t pid);
+
+tid_t sys_thread_create(void *func, void *arg);
+void sys_thread_join(tid_t tid);
+void sys_thread_exit();
 /************************************************************/
 
 #endif

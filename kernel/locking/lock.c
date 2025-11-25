@@ -7,19 +7,7 @@
 #include <assert.h>
 
 spin_lock_t kernel_lock;
-
-static void clear_wait_queue(list_head *queue) {
-    if(!LIST_EMPTY(queue)) {
-        list_node_t *node, *next_node;
-        for(node = LIST_FIRST(queue); node != queue; node = next_node) {
-            next_node = node->next;
-            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
-            LIST_DELETE(node);
-            LIST_APPEND(node, &ready_queue);
-            node_pcb->status = TASK_READY;
-        }
-    }
-}
+extern void clear_wait_queue(list_head *queue);
 
 mutex_lock_t mlocks[LOCK_NUM];
 
@@ -268,6 +256,20 @@ void init_mbox() {
         memset(mboxes[i].message, 0, MAX_MBOX_LENGTH + 1);
         LIST_INIT_HEAD(&mboxes[i].send_wait_queue);
         LIST_INIT_HEAD(&mboxes[i].recv_wait_queue);
+        
+        mboxes[i].write_lock.lock.status = UNLOCKED;
+        LIST_INIT_HEAD(&mboxes[i].write_lock.block_queue);
+        mboxes[i].write_lock.key = -1;
+        mboxes[i].write_lock.pnum = 0;
+        memset(mboxes[i].write_lock.pid, 0, sizeof(mboxes[i].write_lock.pid));
+        mboxes[i].write_lock.using_pid = 0;
+
+        mboxes[i].read_lock.lock.status = UNLOCKED;
+        LIST_INIT_HEAD(&mboxes[i].read_lock.block_queue);
+        mboxes[i].read_lock.key = -1;
+        mboxes[i].read_lock.pnum = 0;
+        memset(mboxes[i].read_lock.pid, 0, sizeof(mboxes[i].read_lock.pid));
+        mboxes[i].read_lock.using_pid = 0;
     }
 }
 
@@ -299,108 +301,97 @@ void do_mbox_close(int mbox_idx) {
         memset(mboxes[mbox_idx].message, 0, MAX_MBOX_LENGTH + 1);
         clear_wait_queue(&mboxes[mbox_idx].send_wait_queue);
         clear_wait_queue(&mboxes[mbox_idx].recv_wait_queue);
+        clear_wait_queue(&mboxes[mbox_idx].write_lock.block_queue);
+        clear_wait_queue(&mboxes[mbox_idx].read_lock.block_queue);
+        mboxes[mbox_idx].write_lock.lock.status = UNLOCKED;
+        mboxes[mbox_idx].write_lock.using_pid = 0;
+        mboxes[mbox_idx].read_lock.lock.status = UNLOCKED;
+        mboxes[mbox_idx].read_lock.using_pid = 0;
     }
 }
 
 int do_mbox_send(int mbox_idx, void * msg, int msg_length) {
     mailbox_t *mbox = &mboxes[mbox_idx];
+
     clear_wait_queue(&mbox->recv_wait_queue);
+
+    // lock
+    while(mbox->write_lock.lock.status == LOCKED) {
+        do_block(&current_running->list, &mbox->write_lock.block_queue);
+    }
+    mbox->write_lock.using_pid = current_running->pid;
+    mbox->write_lock.lock.status = LOCKED;
+
+    // clear_wait_queue(&mbox->recv_wait_queue);
+    // clear_wait_queue(&mbox->send_wait_queue);
 
     char *msg_str = (char *)msg;
     int block_cnt = 0;
-    while(1) {
-        int ok_send = 1;
-        for(int i = 0; i < msg_length; i++) {
-            if((i + mbox->tail + 1) % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
-                ok_send = 0;
-                break;
-            }
-        }
-        if(ok_send) {
-            break;
-        }
-        else {
+
+    for(int i = 0; i < msg_length; i++) {
+        mbox->tail %= (MAX_MBOX_LENGTH + 1);
+        while((mbox->tail + 1) % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
             block_cnt++;
             LIST_APPEND(&current_running->list, &mbox->send_wait_queue);
             current_running->status = TASK_BLOCKED;
             do_scheduler();
         }
-    }
-
-    // memcpy(&mbox->message[mbox->tail], msg, msg_length);
-    for(int i = 0; i < msg_length; i++) {
-        if(mbox->tail > MAX_MBOX_LENGTH) {
-            mbox->tail -= MAX_MBOX_LENGTH + 1;
-        }
         mbox->message[mbox->tail++] = msg_str[i];
     }
-    
-    //mbox->tail += msg_length;
+
+
     mbox->tail %= (MAX_MBOX_LENGTH + 1);
 
-    // for(int i = 0; i < msg_length; i++) {
-    //     if(mbox->tail > MAX_MBOX_LENGTH) {
-    //         mbox->tail -= MAX_MBOX_LENGTH + 1;
-    //     }
-    //     while((mbox->tail + 1) % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
-    //         LIST_APPEND(&current_running->list, &mbox->send_wait_queue);
-    //         current_running->status = TASK_BLOCKED;
-    //         do_scheduler();
-    //     }
-    //     mbox->message[mbox->tail++] = msg_str[i];
-    // }
+    // unlock
+    mbox->write_lock.using_pid = 0;
+    mbox->write_lock.lock.status = UNLOCKED;
+    if(!LIST_EMPTY(&mbox->write_lock.block_queue)) {
+        list_node_t *first_blocked_node = LIST_FIRST(&mbox->write_lock.block_queue);
+        do_unblock(first_blocked_node);
+    }
+
 
     return block_cnt;
 }
 
 int do_mbox_recv(int mbox_idx, void * msg, int msg_length) {
     mailbox_t *mbox = &mboxes[mbox_idx];
+
     clear_wait_queue(&mbox->send_wait_queue);
+
+    // lock
+    while(mbox->read_lock.lock.status == LOCKED) {
+        do_block(&current_running->list, &mbox->read_lock.block_queue);
+    }
+    mbox->read_lock.using_pid = current_running->pid;
+    mbox->read_lock.lock.status = LOCKED;
+
+    // clear_wait_queue(&mbox->send_wait_queue);
+    // clear_wait_queue(&mbox->recv_wait_queue);
 
     char *msg_str = (char *)msg;
     int block_cnt = 0;
-    while(1) {
-        int ok_recv = 1;
-        for(int i = 0; i < msg_length; i++) {
-            if(mbox->tail % (MAX_MBOX_LENGTH + 1) == (i + mbox->head) % (MAX_MBOX_LENGTH + 1)) {
-                ok_recv = 0;
-                break;
-            }
-        }
-        if(ok_recv) {
-            break;
-        }
-        else {
+
+    for(int i = 0; i < msg_length; i++) {
+        mbox->head %= (MAX_MBOX_LENGTH + 1);
+        while(mbox->tail % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
             block_cnt++;
             LIST_APPEND(&current_running->list, &mbox->recv_wait_queue);
             current_running->status = TASK_BLOCKED;
             do_scheduler();
         }
-    }
-
-    // memcpy(msg, &mbox->message[mbox->head], msg_length);
-    for(int i = 0; i < msg_length; i++) {
-        if(mbox->head > MAX_MBOX_LENGTH) {
-            mbox->head -= MAX_MBOX_LENGTH + 1;
-        }
         msg_str[i] = mbox->message[mbox->head++];
     }
-    // mbox->head += msg_length;
+
     mbox->head %= (MAX_MBOX_LENGTH + 1);
 
+    // unlock
+    mbox->read_lock.using_pid = 0;
+    mbox->read_lock.lock.status = UNLOCKED;
+    if(!LIST_EMPTY(&mbox->read_lock.block_queue)) {
+        list_node_t *first_blocked_node = LIST_FIRST(&mbox->read_lock.block_queue);
+        do_unblock(first_blocked_node);
+    }
 
-    // char *msg_str = (char *)msg;
-    // for(int i = 0; i < msg_length; i++) {
-    //     if(mbox->head > MAX_MBOX_LENGTH) {
-    //         mbox->head -= MAX_MBOX_LENGTH + 1;
-    //     }
-    //     while(mbox->tail % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
-    //         LIST_APPEND(&current_running->list, &mbox->recv_wait_queue);
-    //         current_running->status = TASK_BLOCKED;
-    //         do_scheduler();
-    //     }
-    //     msg_str[i] = mbox->message[mbox->head++];
-    // }
-    
     return block_cnt;
 }

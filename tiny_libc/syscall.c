@@ -272,15 +272,26 @@ int sys_mbox_recv(int mbox_idx, void *msg, int msg_length)
 
 pid_t sys_taskset(uint32_t mask, char *taskname)
 {
-    /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_recv */
     pid_t pid = invoke_syscall(SYSCALL_TASKSET, (long)mask, (long)taskname, 0, 0, 0);
     return pid;
 }
 
 int sys_taskset_p(uint32_t mask, pid_t pid)
 {
-    /* TODO: [p3-task2] call invoke_syscall to implement sys_mbox_recv */
     int success = invoke_syscall(SYSCALL_TASKSET_P, (long)mask, (long)pid, 0, 0, 0);
     return success;
+}
+
+tid_t sys_thread_create(void *func, void *arg) {
+    tid_t tid = invoke_syscall(SYSCALL_THREAD_CREATE, (long)func, (long)arg, 0, 0, 0);
+    return tid;
+}
+
+void sys_thread_join(tid_t tid) {
+    invoke_syscall(SYSCALL_THREAD_JOIN, (long)tid, 0, 0, 0, 0);
+}
+
+void sys_thread_exit() {
+    invoke_syscall(SYSCALL_THREAD_EXIT, 0, 0, 0, 0, 0);
 }
 /************************************************************/
