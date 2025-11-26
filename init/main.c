@@ -87,7 +87,7 @@ void init_pcb_stack(
     pt_regs->regs[2] = (reg_t)user_stack;       // sp
     pt_regs->regs[4] = (reg_t)pcb;              // tp
 
-    pt_regs->sstatus = SR_SIE;
+    pt_regs->sstatus = SR_SPIE;
     pt_regs->sepc = (reg_t)entry_point;
     pt_regs->stval = 0;
     pt_regs->scause = 0;
