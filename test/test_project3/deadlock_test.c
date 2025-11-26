@@ -11,29 +11,12 @@
 static int print_location = 1;
 static char blank[] = {"                                                          "};
 
-// 初始化程序：填满两个mailbox
 void init_mailboxes(int mbox1, int mbox2) {
     char fill_msg[MSG_SIZE];
     memset(fill_msg, 'X', MSG_SIZE);
-    
-    sys_move_cursor(0, print_location);
-    printf("%s\n", blank);
-    sys_move_cursor(0, print_location);
-    printf("[Initializer] Filling mbox1...\n");
 
     sys_mbox_send(mbox1, fill_msg, MSG_SIZE);
-
-    sys_move_cursor(0, print_location);
-    printf("%s\n", blank);
-    sys_move_cursor(0, print_location);
-    printf("[Initializer] Filling mbox2...\n");
-    
     sys_mbox_send(mbox2, fill_msg, MSG_SIZE);
-    
-    sys_move_cursor(0, print_location);
-    printf("%s\n", blank);
-    sys_move_cursor(0, print_location);
-    printf("[Initializer] Mailboxes filled successfully\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -46,16 +29,7 @@ int main(int argc, char *argv[]) {
     init_mailboxes(mbox1, mbox2);
     
     pid_t pid_a = sys_exec("deadlock_procA", 0, NULL);
-    sys_move_cursor(0, print_location);
-    printf("%s\n", blank);
-    sys_move_cursor(0, print_location);
-    printf("[Main] Started process A with pid=%d\n", pid_a);
-    
     pid_t pid_b = sys_exec("deadlock_procB", 0, NULL);
-    sys_move_cursor(0, print_location);
-    printf("%s\n", blank);
-    sys_move_cursor(0, print_location);
-    printf("[Main] Started process B with pid=%d\n", pid_b);
     
     sys_move_cursor(0, print_location);
     printf("%s\n", blank);

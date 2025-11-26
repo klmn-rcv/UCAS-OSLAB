@@ -10,10 +10,11 @@
 #define MBOX_NAME2 "mbox2"
 #define MSG_SIZE 64
 
-static int print_location = 2;
-static char blank[] = {"                                             "};
+static int print_location_send = 2;
+static int print_location_recv = 3;
+static char blank[] = {"                                                  "};
 
-void myPrintf(char *str) {
+void myPrintf(char *str, int print_location) {
     sys_move_cursor(0, print_location);
     printf("%s\n", blank);
     sys_move_cursor(0, print_location);
@@ -28,9 +29,11 @@ void *send(void *arg) {
     while(1) {
         send_length = rand() % MSG_SIZE + 1;
         generateRandomString(send_buf, send_length);
-        myPrintf("[Process A] Trying to send to mbox1...\n");
+        myPrintf("[Thread A-send] Trying to send to mbox1...\n", print_location_send);
         sys_mbox_send(*mbox_p, send_buf, send_length);
-        myPrintf("[Process A] Sent to mbox1\n");
+        myPrintf("[Thread A-send] Sent to mbox1               \n", print_location_send);
+        int sleep_time = rand() % 3 + 1;
+        sys_sleep(sleep_time);
     }
 
     sys_thread_exit();
@@ -44,9 +47,11 @@ void *recv(void *arg) {
 
     while(1) {
         recv_length = rand() % MSG_SIZE + 1;
-        myPrintf("[Process A] Trying to recv from mbox2...\n");
+        myPrintf("[Thread A-recv] Trying to recv from mbox2...\n", print_location_recv);
         sys_mbox_recv(*mbox_p, recv_buf, recv_length);
-        myPrintf("[Process A] Received from mbox2\n");
+        myPrintf("[Thread A-recv] Received from mbox2          \n", print_location_recv);
+        int sleep_time = rand() % 3 + 1;
+        sys_sleep(sleep_time);
     }
 
     sys_thread_exit();
@@ -54,7 +59,7 @@ void *recv(void *arg) {
 }
 
 int main() {
-    sys_move_cursor(0, print_location);
+    sys_move_cursor(0, print_location_send);
     printf("[Process A] Starting...\n");
     
     int mbox1 = sys_mbox_open(MBOX_NAME1);
@@ -68,9 +73,9 @@ int main() {
     
     sys_mbox_close(mbox1);
     sys_mbox_close(mbox2);
-    sys_move_cursor(0, print_location);
+    sys_move_cursor(0, print_location_send);
     printf("%s\n", blank);
-    sys_move_cursor(0, print_location);
+    sys_move_cursor(0, print_location_send);
     printf("[Process A] Finished\n");
     return 0;
 }
