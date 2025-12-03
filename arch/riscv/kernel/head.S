@@ -6,8 +6,15 @@
 #include <asm.h>
 #include <csr.h>
 
-#define KERNEL_STACK		0x50500000
+//#define KERNEL_STACK		0x50500000
+#define KERNEL_STACK		0xffffffc050500000
 #define PAGE_SIZE       4096
+
+// task number location
+.equ task_num_loc, 0xffffffc0502001fa
+
+// task infomation offset location
+.equ task_info_offset_loc, 0xffffffc0502001f6
 
 .section ".entry_function","ax"
 ENTRY(_start)
@@ -30,11 +37,16 @@ bss_clear_loop:
 bss_clear_end:
 
   /* TODO: [p1-task2] setup C environment */
-  la sp, KERNEL_STACK + PAGE_SIZE
+  li sp, KERNEL_STACK + PAGE_SIZE
   jal zero, master_core
 slave_core:
-  la sp, KERNEL_STACK + 2 * PAGE_SIZE
+  li sp, KERNEL_STACK + 2 * PAGE_SIZE
 master_core:
+	li t0, task_num_loc
+	li t1, task_info_offset_loc
+	lhu a0, 0(t0)
+	lwu a1, 0(t1)
+
   jal ra, main
 
 

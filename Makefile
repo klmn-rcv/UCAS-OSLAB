@@ -11,7 +11,7 @@ PROJECT_IDX	= 4
 SHELL       = /bin/sh
 DISK        = /dev/sdb
 TTYUSB1     = /dev/ttyUSB1
-DIR_OSLAB   = $(HOME)/OSLab-RISC-V
+DIR_OSLAB   = $(HOME)/oslab/OSLab-RISC-V
 DIR_QEMU    = $(DIR_OSLAB)/qemu
 DIR_UBOOT   = $(DIR_OSLAB)/u-boot
 
@@ -70,7 +70,7 @@ DIR_TEST_PROJ   = $(DIR_TEST)/test_project$(PROJECT_IDX)
 
 BOOTLOADER_ENTRYPOINT   = 0x50200000
 KERNEL_ENTRYPOINT       = 0xffffffc050202000
-USER_ENTRYPOINT         = 0x200000
+USER_ENTRYPOINT         = 0x10000
 
 # -----------------------------------------------------------------------
 # UCAS-OS Kernel Source Files

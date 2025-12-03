@@ -67,7 +67,7 @@ int port_read_ch(void);
 
 // read blocks from sd card
 // use bios bios_sd_read function
-int sd_read(unsigned mem_address, unsigned num_of_blocks, unsigned block_id);
+int sd_read(unsigned long mem_address, unsigned num_of_blocks, unsigned block_id);
 
 /************************************************************/
 // write blocks to sd card

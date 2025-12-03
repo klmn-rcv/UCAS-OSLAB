@@ -34,14 +34,23 @@
 #define MEM_SIZE 32
 #define PAGE_SIZE 4096 // 4K
 #define INIT_KERNEL_STACK 0xffffffc052000000
-#define FREEMEM_KERNEL (INIT_KERNEL_STACK+PAGE_SIZE)
-// #define FREEMEM_USER INIT_USER_STACK
+#define FREEMEM_KERNEL (INIT_KERNEL_STACK+2*PAGE_SIZE) // 前两页分别作为了主核和从核的kernel stack
+#define FREEMEM_KERNEL_END 0xffffffc060000000
+#define PAGE_TOTAL_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
+
+#define USER_STACK_PAGE_NUM 10
+
+////////////////////////////////////////////////////////////////
+// #define INIT_USER_STACK 0x52500000      // 要改！！！！！
+// #define FREEMEM_USER INIT_USER_STACK    // 要改！！！！！
+////////////////////////////////////////////////////////////////
 
 /* Rounding; only works for n = power of two */
 #define ROUND(a, n)     (((((uint64_t)(a))+(n)-1)) & ~((n)-1))
 #define ROUNDDOWN(a, n) (((uint64_t)(a)) & ~((n)-1))
 
 extern ptr_t allocPage(int numPage);
+// extern ptr_t allocUserPage(int numPage);
 // TODO [P4-task1] */
 void freePage(ptr_t baseAddr);
 

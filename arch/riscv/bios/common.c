@@ -27,7 +27,7 @@ int port_read_ch(void)
     return call_bios((long)BIOS_GETCHAR, IGNORE, IGNORE, IGNORE, IGNORE, IGNORE);
 }
 
-int sd_read(unsigned mem_address, unsigned num_of_blocks, unsigned block_id)
+int sd_read(unsigned long mem_address, unsigned num_of_blocks, unsigned block_id)
 {
     return (int)call_bios((long)BIOS_SDREAD, (long)mem_address, \
                             (long)num_of_blocks, (long)block_id, IGNORE, IGNORE);

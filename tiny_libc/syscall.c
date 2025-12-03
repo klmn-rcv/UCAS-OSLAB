@@ -282,16 +282,33 @@ int sys_taskset_p(uint32_t mask, pid_t pid)
     return success;
 }
 
-tid_t sys_thread_create(void *func, void *arg) {
-    tid_t tid = invoke_syscall(SYSCALL_THREAD_CREATE, (long)func, (long)arg, 0, 0, 0);
-    return tid;
+// tid_t sys_thread_create(void *func, void *arg) {
+//     tid_t tid = invoke_syscall(SYSCALL_THREAD_CREATE, (long)func, (long)arg, 0, 0, 0);
+//     return tid;
+// }
+
+// void sys_thread_join(tid_t tid) {
+//     invoke_syscall(SYSCALL_THREAD_JOIN, (long)tid, 0, 0, 0, 0);
+// }
+
+// void sys_thread_exit() {
+//     invoke_syscall(SYSCALL_THREAD_EXIT, 0, 0, 0, 0, 0);
+// }
+
+size_t sys_free_mem(void) {
+
 }
 
-void sys_thread_join(tid_t tid) {
-    invoke_syscall(SYSCALL_THREAD_JOIN, (long)tid, 0, 0, 0, 0);
+/* TODO: [P4 task5] pipe*/
+int sys_pipe_open(const char *name) {
+
 }
 
-void sys_thread_exit() {
-    invoke_syscall(SYSCALL_THREAD_EXIT, 0, 0, 0, 0, 0);
+long sys_pipe_give_pages(int pipe_idx, void *src, size_t length) {
+
+}
+
+long sys_pipe_take_pages(int pipe_idx, void *dst, size_t length) {
+    
 }
 /************************************************************/

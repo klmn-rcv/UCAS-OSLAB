@@ -25,6 +25,7 @@ typedef struct {
     char taskname[64];
     uint32_t offset;
     uint32_t filesz;
+    uint32_t memsz;
 } task_info_t;
 
 #define TASK_MAXNUM 32
@@ -104,6 +105,7 @@ static void create_image(int nfiles, char *files[])
             taskinfo[taskidx].taskid = (uint16_t)taskidx;
             strcpy(taskinfo[taskidx].taskname, *files);
             taskinfo[taskidx].offset = phyaddr;
+            taskinfo[taskidx].memsz = 0;
         }
 
         /* open input file */
@@ -128,6 +130,10 @@ static void create_image(int nfiles, char *files[])
             /* update nbytes_kernel */
             if (strcmp(*files, "main") == 0) {
                 nbytes_kernel += get_filesz(phdr);
+            }
+
+            if (taskidx >= 0) {
+                taskinfo[taskidx].memsz += get_memsz(phdr);
             }
         }
 
@@ -247,6 +253,10 @@ static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
     fputc((tasknum >> 8) & 0xff, img);
     fseek(img, TASK_INFO_OFFSET_LOC, SEEK_SET);
     fwrite(phyaddr, 4, 1, img);
+
+    printf("DEBUG: *phyaddr: %d\n", *phyaddr);
+    printf("DEBUG: %s\n", taskinfo[1].taskname);
+    printf("DEBUG: sizeof(task_info_t) is %d\n", sizeof(task_info_t));
 
     // p1-task4:
     fseek(img, *phyaddr, SEEK_SET);

@@ -17,14 +17,15 @@ extern void init_pcb_stack(ptr_t kernel_stack, ptr_t user_stack, ptr_t entry_poi
 //extern void sys_thread_exit();
 
 pcb_t pcb[NUM_MAX_TASK];
-pcb_t tcb[NUM_MAX_TASK];
+// pcb_t tcb[NUM_MAX_TASK];
 const ptr_t pid0_stack = INIT_KERNEL_STACK + PAGE_SIZE;
 pcb_t pid0_pcb = {
     .pid = 0,
     .kernel_sp = (ptr_t)pid0_stack,
     .user_sp = (ptr_t)pid0_stack,
     .run_core_mask = 0x1,
-    .running_core_id = 0
+    .running_core_id = 0,
+    .pgdir = 0xffffffc000000000lu + PGDIR_PA
 };
 const ptr_t pid1_stack = INIT_KERNEL_STACK + 2 * PAGE_SIZE;
 pcb_t pid1_pcb = {
@@ -32,7 +33,8 @@ pcb_t pid1_pcb = {
     .kernel_sp = (ptr_t)pid1_stack,
     .user_sp = (ptr_t)pid1_stack,
     .run_core_mask = 0x2,
-    .running_core_id = 1
+    .running_core_id = 1,
+    .pgdir = 0xffffffc000000000lu + PGDIR_PA
 };
 
 LIST_HEAD(ready_queue);
@@ -91,6 +93,10 @@ void do_scheduler(void)
 
         // TODO: [p2-task1] switch_to current_running
 
+        set_satp(SATP_MODE_SV39, current_running->pid, kva2pa(current_running->pgdir) >> NORMAL_PAGE_SHIFT);
+        local_flush_tlb_all();
+        local_flush_icache_all();
+
         switch_to(prev_pcb, next_pcb);
     }
 }
@@ -141,30 +147,39 @@ void clear_wait_queue(list_head *queue) {
     }
 }
 
+
+
 pid_t do_exec(char *name, int argc, char *argv[]) {
     int pid = create_task(name);
     if(pid == 0) return 0;  // task not found
 
     pcb[pid].run_core_mask = current_running->run_core_mask;
-    // pcb[pid].user_sp -= (argc * sizeof(char *));
+    pcb[pid].user_sp -= (argc * sizeof(char *));
 
     regs_context_t *pt_regs = (regs_context_t *)(pcb[pid].kernel_sp + sizeof(switchto_context_t));
     pt_regs->regs[10] = (reg_t)argc;
     pt_regs->regs[11] = (reg_t)pcb[pid].user_sp;
 
-    char **argv_to_user = (char **)pcb[pid].user_sp;
+    int success = 0;
+    uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, &success);
+    assert(success);
+
+    uint32_t sum_len = 0;
+    char **argv_to_user = (char **)user_sp_kva;
 
     for(int i = 0; i < argc; i++) {
         int len = strlen(argv[i]);
-        pcb[pid].user_sp -= (len + 1);
-        argv_to_user[i] = (char *)pcb[pid].user_sp;
+        user_sp_kva -= (len + 1);
+        sum_len += (len + 1);
+        argv_to_user[i] = (char *)user_sp_kva;
         
         for(int j = 0; j < len; j++) {
-            *((char *)pcb[pid].user_sp + j) = argv[i][j];
+            *((char *)user_sp_kva + j) = argv[i][j];
         }
-        *((char *)pcb[pid].user_sp + len) = '\0';
+        *((char *)user_sp_kva + len) = '\0';
     }
 
+    pcb[pid].user_sp -= sum_len;
     pcb[pid].user_sp &= 0xFFFFFFFFFFFFFFF0;
 
     pt_regs->regs[2] = pcb[pid].user_sp;  // store sp back to user context
@@ -189,10 +204,21 @@ static void clear_wait_list(pid_t pid) {
     }
 }
 
+
+static void free_user_stack_page(pid_t pid) {
+    for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
+        int success = 0;
+        uintptr_t user_stack_page_kva = va2kva(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir, &success);
+        assert(success);
+        freePage(user_stack_page_kva);
+    }
+}
+
 void do_exit(void) {
     current_running->status = TASK_EXITED;
     do_mutex_lock_free(current_running->pid);
     clear_wait_list(current_running->pid);
+    free_user_stack_page(current_running->pid);
     do_scheduler();
 }
 
@@ -205,6 +231,9 @@ int do_kill(pid_t pid) {
     do_mutex_lock_free(pid);
     clear_wait_list(pid);
     LIST_DELETE(&pcb[pid].list);
+
+    free_user_stack_page(pid);
+    
     if(current_running->pid == pid) {
         do_scheduler();
     }
@@ -258,54 +287,54 @@ int do_taskset_p(uint32_t mask, pid_t pid) {
     return 1;
 }
 
-tid_t do_thread_create(void *func, void *arg) {
-    pcb_t *new_thread = NULL;
-    int i;
-    for (i = 0; i < 16; i++) {
-        if (tcb[i].status == TASK_EXITED) {
-            new_thread = &tcb[i];
-            break;
-        }
-    }
+// tid_t do_thread_create(void *func, void *arg) {
+//     pcb_t *new_thread = NULL;
+//     int i;
+//     for (i = 0; i < 16; i++) {
+//         if (tcb[i].status == TASK_EXITED) {
+//             new_thread = &tcb[i];
+//             break;
+//         }
+//     }
     
-    assert(new_thread);
+//     assert(new_thread);
     
-    tid_t tid = i;
-    new_thread->pid = current_running->pid;
-    new_thread->is_thread = 1;
-    new_thread->tid = tid;
+//     tid_t tid = i;
+//     new_thread->pid = current_running->pid;
+//     new_thread->is_thread = 1;
+//     new_thread->tid = tid;
 
-    new_thread->kernel_sp = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
-    new_thread->user_sp = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
-    new_thread->kernel_stack_base = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
-    new_thread->user_stack_base = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+//     new_thread->kernel_sp = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+//     new_thread->user_sp = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+//     // new_thread->kernel_stack_base = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+//     // new_thread->user_stack_base = (reg_t)((tid + NUM_MAX_TASK) * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
 
-    new_thread->run_core_mask = current_running->run_core_mask;
+//     new_thread->run_core_mask = current_running->run_core_mask;
 
-    init_pcb_stack(new_thread->kernel_sp, new_thread->user_sp, (ptr_t)func, new_thread);
-    ((regs_context_t *)(new_thread->kernel_sp + sizeof(switchto_context_t)))->regs[10] = (reg_t)arg;
+//     init_pcb_stack(new_thread->kernel_sp, new_thread->user_sp, (ptr_t)func, new_thread);
+//     ((regs_context_t *)(new_thread->kernel_sp + sizeof(switchto_context_t)))->regs[10] = (reg_t)arg;
 
-    new_thread->status = TASK_READY;
-    LIST_APPEND(&new_thread->list, &ready_queue);
+//     new_thread->status = TASK_READY;
+//     LIST_APPEND(&new_thread->list, &ready_queue);
 
-    return tid;
-}
+//     return tid;
+// }
 
-void do_thread_join(tid_t tid) {
-    assert(0 <= tid && tid < NUM_MAX_TASK);
+// void do_thread_join(tid_t tid) {
+//     assert(0 <= tid && tid < NUM_MAX_TASK);
     
-    if(tcb[tid].status != TASK_EXITED) {
-        do_block(&current_running->list, &tcb[tid].wait_list);
-    }
-}
+//     if(tcb[tid].status != TASK_EXITED) {
+//         do_block(&current_running->list, &tcb[tid].wait_list);
+//     }
+// }
 
-void do_thread_exit() {
-    assert(current_running->is_thread);
-    assert(current_running->tid != -1);
-    current_running->status = TASK_EXITED;
-    current_running->pid = 0;
-    current_running->running_core_id = -1;
-    clear_wait_queue(&current_running->wait_list);
-    assert(LIST_EMPTY(&current_running->wait_list));
-    do_scheduler();
-}
+// void do_thread_exit() {
+//     assert(current_running->is_thread);
+//     assert(current_running->tid != -1);
+//     current_running->status = TASK_EXITED;
+//     current_running->pid = 0;
+//     current_running->running_core_id = -1;
+//     clear_wait_queue(&current_running->wait_list);
+//     assert(LIST_EMPTY(&current_running->wait_list));
+//     do_scheduler();
+// }

@@ -221,6 +221,9 @@ ENTRY(exception_handler_entry)
 
   call lock_kernel
 
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
+
   csrr a2, scause
   csrr a1, stval
   ld a0, PCB_KERNEL_SP(tp)

@@ -4,6 +4,9 @@
 #include <type.h>
 #include <common.h>
 #include <pgtable.h>
+#include <assert.h>
+
+#define SECTOR_SIZE 512
 
 #define KERNEL_JMPTAB_BASE 0xffffffc051ffff00
 typedef enum {
@@ -49,11 +52,25 @@ static inline int bios_getchar(void)
     return call_jmptab(CONSOLE_GETCHAR, 0, 0, 0, 0, 0);
 }
 
-static inline int bios_sd_read(unsigned mem_address, unsigned num_of_blocks, \
+static inline int bios_sd_read(unsigned long mem_address, unsigned num_of_blocks, \
                               unsigned block_id)
 {
     return call_jmptab(SD_READ, (long)mem_address, (long)num_of_blocks, \
                         (long)block_id, 0, 0);
+}
+
+static inline void bios_sd_read_wrapper(unsigned long mem_address, unsigned num_of_blocks, \
+                              unsigned block_id)
+{
+    while(num_of_blocks > 32) {
+        int ret = bios_sd_read(mem_address, 32, block_id);
+        assert(ret);
+        mem_address += SECTOR_SIZE * 32;
+        block_id += 32;
+        num_of_blocks -= 32;
+    }
+    int ret = bios_sd_read(mem_address, num_of_blocks, block_id);
+    // assert(ret);
 }
 
 /************************************************************/

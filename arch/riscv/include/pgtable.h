@@ -2,6 +2,7 @@
 #define PGTABLE_H
 
 #include <type.h>
+#include <assert.h>
 
 #define SATP_MODE_SV39 8
 #define SATP_MODE_SV48 9
@@ -76,42 +77,111 @@ typedef uint64_t PTE;
 static inline uintptr_t kva2pa(uintptr_t kva)
 {
     /* TODO: [P4-task1] */
+    return kva - 0xffffffc000000000lu;
 }
 
 static inline uintptr_t pa2kva(uintptr_t pa)
 {
     /* TODO: [P4-task1] */
+    return pa + 0xffffffc000000000lu;
 }
 
 /* get physical page addr from PTE 'entry' */
 static inline uint64_t get_pa(PTE entry)
 {
     /* TODO: [P4-task1] */
+    uint64_t ppn = (entry >> 10) & ((1ULL << 44) - 1); // 提取44位PPN
+    return ppn << NORMAL_PAGE_SHIFT; // 左移12位得到物理地址
 }
 
 /* Get/Set page frame number of the `entry` */
 static inline long get_pfn(PTE entry)
 {
     /* TODO: [P4-task1] */
+    // 提取PPN字段（物理页号），位于位[53:10]，共44位
+    return (entry >> 10) & ((1ULL << 44) - 1);
 }
 static inline void set_pfn(PTE *entry, uint64_t pfn)
 {
     /* TODO: [P4-task1] */
+    // 清除原有的PPN字段（位[53:10]），设置新的PPN
+    // 保留低10位的标志位
+    *entry = (*entry & 0x3FF) | ((pfn & ((1ULL << 44) - 1)) << 10);
 }
 
 /* Get/Set attribute(s) of the `entry` */
 static inline long get_attribute(PTE entry, uint64_t mask)
 {
     /* TODO: [P4-task1] */
+    // 返回entry中与mask对应的标志位
+    return entry & 0x3FF & mask;
 }
+
+// 设置PTE中的标志位
 static inline void set_attribute(PTE *entry, uint64_t bits)
 {
     /* TODO: [P4-task1] */
+    *entry |= (bits & 0x3FF);
 }
 
 static inline void clear_pgdir(uintptr_t pgdir_addr)
 {
     /* TODO: [P4-task1] */
+    PTE *pgdir = (PTE *)pgdir_addr;
+    for (int i = 0; i < 512; i++) {          // Sv39每级512个条目
+        pgdir[i] = 0;
+    }
+}
+
+static inline int isLeaf(PTE entry) {
+    // 检查R、W、X位是否全为0
+    if ((entry & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC)) == 0) {
+        return 0; // 非叶子节点
+    } else {
+        return 1; // 叶子节点
+    }
+}
+
+static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
+    PTE *pgd = (PTE *)pgdir;
+    va &= VA_MASK;
+    uint64_t vpn2 =
+        va >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
+    uint64_t vpn1 = (vpn2 << PPN_BITS) ^
+                    (va >> (NORMAL_PAGE_SHIFT + PPN_BITS));
+    uint64_t vpn0 = (vpn2 << (PPN_BITS + PPN_BITS)) ^
+                    (vpn1 << PPN_BITS) ^
+                    (va >> NORMAL_PAGE_SHIFT);
+    if(pgd[vpn2] == 0) {
+        *success = 0;
+        return 0;
+    }
+    if(isLeaf(pgd[vpn2])) {
+        *success = 1;
+        return pa2kva(get_pa(pgd[vpn2]));
+    }
+
+    PTE *pmd = (PTE *)pa2kva(get_pa(pgd[vpn2]));
+    if(pmd[vpn1] == 0) {
+        *success = 0;
+        return 0;
+    }
+    if(isLeaf(pmd[vpn1])) {
+        *success = 1;
+        return pa2kva(get_pa(pmd[vpn1]));
+    }
+    
+    PTE *pt = (PTE *)pa2kva(get_pa(pmd[vpn1]));
+    if(pt[vpn0] == 0) {
+        *success = 0;
+        return 0;
+    }
+    if(isLeaf(pt[vpn0])) {
+        *success = 1;
+        return pa2kva(get_pa(pt[vpn0]));
+    }
+    else
+        assert(0);
 }
 
 #endif  // PGTABLE_H

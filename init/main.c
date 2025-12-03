@@ -56,11 +56,17 @@ static void init_task_info(/*uint16_t tasknum, uint32_t task_info_offset*/)
 {
     // TODO: [p1-task4] Init 'tasks' array via reading app-info sector
     // NOTE: You need to get some related arguments from bootblock first
+
+    
+    ////////////////////////////////////////////////////
+    // task_info_offset是物理地址！！！！！
+    ////////////////////////////////////////////////////
+
     uint32_t task_info_size = sizeof(task_info_t) * tasknum;
     unsigned begin_sector = NBYTES2SEC(task_info_offset) - 1;
     unsigned end_sector = NBYTES2SEC(task_info_offset + task_info_size) - 1;
     unsigned num_sector = end_sector - begin_sector + 1;
-    unsigned mem_address = TASK_MEM_BASE + TASK_SIZE * tasknum;
+    uintptr_t mem_address = TASK_MEM_BASE + TASK_SIZE * tasknum;
     bios_sd_read(mem_address, num_sector, begin_sector);
     memcpy((uint8_t *)mem_address, (uint8_t *)(mem_address + (task_info_offset % SECTOR_SIZE)), task_info_size);
     memcpy((uint8_t *)tasks, (uint8_t *)mem_address, task_info_size);
@@ -87,7 +93,7 @@ void init_pcb_stack(
     pt_regs->regs[2] = (reg_t)user_stack;       // sp
     pt_regs->regs[4] = (reg_t)pcb;              // tp
 
-    pt_regs->sstatus = SR_SPIE;
+    pt_regs->sstatus = SR_SPIE | SR_SUM;
     pt_regs->sepc = (reg_t)entry_point;
     pt_regs->stval = 0;
     pt_regs->scause = 0;
@@ -112,10 +118,10 @@ void init_pcb_stack(
 }
 
 int create_task(char *taskname) {
-    ptr_t entry_point = load_task_img(taskname, tasks, tasknum);
-    if(entry_point == 0) {  // task not found
-        return 0;
-    }
+    // ptr_t entry_point = load_task_img(taskname, tasks, tasknum);
+    // if(entry_point == 0) {  // task not found
+    //     return 0;
+    // }
 
     int pid = 0;
     for(int i = 2; i < NUM_MAX_TASK; i++) {
@@ -127,15 +133,27 @@ int create_task(char *taskname) {
     if(pid == 0) {
         return 0;
     }
+
+    ptr_t entry_point = map_and_load_task_img(taskname, pcb[pid].pgdir, tasks, tasknum);
     
-    pcb[pid].kernel_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
-    pcb[pid].user_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
-    pcb[pid].kernel_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
-    pcb[pid].user_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+    
+    // pcb[pid].kernel_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+    // pcb[pid].user_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+    // pcb[pid].kernel_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
+    // pcb[pid].user_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
+
+    pcb[pid].kernel_sp = allocPage(2) + 2 * PAGE_SIZE;
+    // pcb[pid].user_sp = allocUserPage(1) + PAGE_SIZE;
+    pcb[pid].user_sp = USER_STACK_ADDR;
+
+    for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
+        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir);
+    }
+
     LIST_INIT_HEAD(&pcb[pid].wait_list);
     pcb[pid].pid = pid;
-    pcb[pid].is_thread = 0;
-    pcb[pid].tid = -1;
+    // pcb[pid].is_thread = 0;
+    // pcb[pid].tid = -1;
     pcb[pid].cursor_x = 0;
     pcb[pid].cursor_y = 0;
     pcb[pid].wakeup_time = 0;
@@ -161,18 +179,19 @@ static void init_pcb(/*uint16_t tasknum*/)
     for(int i = 2; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
         pcb[i].user_sp = 0;
-        pcb[i].kernel_stack_base = 0;
-        pcb[i].user_stack_base = 0;
+        // pcb[i].kernel_stack_base = 0;
+        // pcb[i].user_stack_base = 0;
         LIST_INIT_HEAD(&pcb[i].wait_list);
         pcb[i].pid = i;
-        pcb[i].is_thread = 0;
-        pcb[i].tid = -1;
+        // pcb[i].is_thread = 0;
+        // pcb[i].tid = -1;
         pcb[i].status = TASK_EXITED;
         pcb[i].cursor_x = 0;
         pcb[i].cursor_y = 0;
         pcb[i].wakeup_time = 0;
         pcb[i].run_core_mask = 0;
         pcb[i].running_core_id = -1;
+        pcb[i].pgdir = allocPage(1);
     }
 
     char *tasknames[TASK_NUM] = {"shell"};
@@ -187,24 +206,24 @@ static void init_pcb(/*uint16_t tasknum*/)
 }
 
 
-static void init_tcb() {
-    for(int i = 0; i < NUM_MAX_TASK; i++) {
-        tcb[i].kernel_sp = 0;
-        tcb[i].user_sp = 0;
-        tcb[i].kernel_stack_base = 0;
-        tcb[i].user_stack_base = 0;
-        LIST_INIT_HEAD(&tcb[i].wait_list);
-        tcb[i].pid = 0;
-        tcb[i].is_thread = 1;
-        tcb[i].tid = i;
-        tcb[i].status = TASK_EXITED;
-        tcb[i].cursor_x = 0;
-        tcb[i].cursor_y = 0;
-        tcb[i].wakeup_time = 0;
-        tcb[i].run_core_mask = 0;
-        tcb[i].running_core_id = -1;
-    }
-}
+// static void init_tcb() {
+//     for(int i = 0; i < NUM_MAX_TASK; i++) {
+//         tcb[i].kernel_sp = 0;
+//         tcb[i].user_sp = 0;
+//         // tcb[i].kernel_stack_base = 0;
+//         // tcb[i].user_stack_base = 0;
+//         LIST_INIT_HEAD(&tcb[i].wait_list);
+//         tcb[i].pid = 0;
+//         tcb[i].is_thread = 1;
+//         tcb[i].tid = i;
+//         tcb[i].status = TASK_EXITED;
+//         tcb[i].cursor_x = 0;
+//         tcb[i].cursor_y = 0;
+//         tcb[i].wakeup_time = 0;
+//         tcb[i].run_core_mask = 0;
+//         tcb[i].running_core_id = -1;
+//     }
+// }
 
 
 static void init_syscall(void)
@@ -242,13 +261,37 @@ static void init_syscall(void)
     syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
     syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
     syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
-    syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
-    syscall[SYSCALL_THREAD_JOIN]       = (long (*)(long,long,long,long,long))do_thread_join;
-    syscall[SYSCALL_THREAD_EXIT]       = (long (*)(long,long,long,long,long))do_thread_exit;
+    // syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
+    // syscall[SYSCALL_THREAD_JOIN]       = (long (*)(long,long,long,long,long))do_thread_join;
+    // syscall[SYSCALL_THREAD_EXIT]       = (long (*)(long,long,long,long,long))do_thread_exit;
 }
 /************************************************************/
 
+/*
+ * Once a CPU core calls this function,
+ * it will stop executing!
+ */
+static void kernel_brake(void)
+{
+    disable_interrupt();
+    while (1)
+        __asm__ volatile("wfi");
+}
 
+static void delete_temp_map(void) {
+    PTE *pgdir = (PTE *)pa2kva(PGDIR_PA);
+    for (uint64_t va = 0x50000000lu; va < 0x51000000lu; 
+         va += 0x200000lu) {
+        va &= VA_MASK;
+        uint64_t vpn2 =
+            va >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
+        uint64_t vpn1 = (vpn2 << PPN_BITS) ^
+                        (va >> (NORMAL_PAGE_SHIFT + PPN_BITS));
+        PTE *pmd = (PTE *)pa2kva(get_pa(pgdir[vpn2]));
+        pmd[vpn1] = 0;
+    }
+    local_flush_tlb_all();
+}
 
 int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 {
@@ -261,12 +304,16 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         // Init task information (〃'▽'〃)
         tasknum = tasknum_arg;
         task_info_offset = task_info_offset_arg;
+
+        // printk("tasknum is: %d\n", tasknum);
+        // printk("task_info_offset is: %d\n", task_info_offset);
+
         init_task_info(/*tasknum, task_info_offset*/);
 
         // Init Process Control Blocks |•'-'•) ✧
         init_pcb(/*tasknum*/);
-        init_tcb();
-        printk("> [INIT] PCB and TCB initialization succeeded.\n");
+        // init_tcb();
+        printk("> [INIT] PCB initialization succeeded.\n");
 
         // Read CPU frequency (｡•ᴗ-)_
         time_base = bios_read_fdt(TIMEBASE);
@@ -291,12 +338,46 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         printk("> [INIT] SCREEN initialization succeeded.\n");
 
         // printl("Here 1, cpuid: %d\n", cpuid);
+
+
+        delete_temp_map();
+
+
+        /*
+         * Just start kernel with VM and print this string
+         * in the first part of task 1 of project 4.
+         * NOTE: if you use SMP, then every CPU core should call
+         *  `kernel_brake()` to stop executing!
+         */
+        screen_move_cursor(0, get_current_cpu_id() + 1);
+        printk("> [INIT] CPU #%u has entered kernel with VM!\n",
+        (unsigned int)get_current_cpu_id());
+        // TODO: [p4-task1 cont.] remove the brake and continue to start user processes.
+
         wakeup_other_hart();
+
+        // kernel_brake();
     }
     else {
         // printl("Here 2, cpuid: %d\n", cpuid);
         current_running = &pcb[1];
         current_running->status = TASK_RUNNING;
+
+        // 因为从核也要用temp map，所以必须在从核里删
+        // 但这样不兼容单核的情况！！
+        delete_temp_map();
+    
+        /*
+         * Just start kernel with VM and print this string
+         * in the first part of task 1 of project 4.
+         * NOTE: if you use SMP, then every CPU core should call
+         *  `kernel_brake()` to stop executing!
+         */
+        screen_move_cursor(0, get_current_cpu_id() + 1);
+        printk("> [INIT] CPU #%u has entered kernel with VM!\n",
+        (unsigned int)get_current_cpu_id());
+        // TODO: [p4-task1 cont.] remove the brake and continue to start user processes.
+        // kernel_brake();
     }
 
     // TODO: [p2-task4] Setup timer interrupt and enable all interrupt globally
