@@ -4,6 +4,7 @@
 #include <os/string.h>
 #include <os/kernel.h>
 #include <os/smp.h>
+#include <os/mm.h>
 #include <printk.h>
 #include <assert.h>
 #include <screen.h>
@@ -19,13 +20,25 @@ void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
     cpuid = get_current_cpu_id();
     // TODO: [p2-task3] & [p2-task4] interrupt handler.
     // call corresponding handler by the value of `scause`
-    if(scause == (SCAUSE_IRQ_FLAG | IRQC_S_TIMER)) {
-        handle_irq_timer(regs, stval, scause);
-    } else if(scause == EXCC_SYSCALL) {
-        handle_syscall(regs, stval, scause);
-    } else {
-        handle_other(regs, stval, scause);
+    // if(scause == (SCAUSE_IRQ_FLAG | IRQC_S_TIMER)) {
+    //     handle_irq_timer(regs, stval, scause);
+    // } else if(scause == EXCC_SYSCALL) {
+    //     handle_syscall(regs, stval, scause);
+    // } else {
+    //     handle_other(regs, stval, scause);
+    // }
+    if(scause & SCAUSE_IRQ_FLAG) {
+        uint64_t irq_cause = scause & ~SCAUSE_IRQ_FLAG;
+        if (irq_cause < IRQC_COUNT && irq_table[irq_cause])
+            irq_table[irq_cause](regs, stval, scause);
+        else assert(0);
     }
+    else {
+        if(scause < EXCC_COUNT && exc_table[scause])
+            exc_table[scause](regs, stval, scause);
+        else assert(0);
+    }
+    // handle_other(regs, stval, scause);
 }
 
 void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)
@@ -33,6 +46,22 @@ void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)
     uint64_t current_time = get_ticks();
     bios_set_timer(current_time + TIMER_INTERVAL);
     do_scheduler();
+}
+
+void handle_page_fault(regs_context_t *regs, uint64_t stval, uint64_t scause) {
+
+    // printl("handle_page_fault: stval is %lx, scause is %lx, sepc is %lx\n", stval, scause, regs->sepc);
+
+    uintptr_t va = stval & VA_MASK;  // 触发缺页的虚拟地址
+    uintptr_t pgdir = current_running->pgdir;
+    // PTE* pte = page_walk(pgdir, va);  // 查找页表项
+    PTE pte;
+    int already_exist = 0;
+    uintptr_t physic_page_kva = alloc_page_helper(va, pgdir, &pte, &already_exist);
+    
+    // 刷新TLB
+    local_flush_tlb_page(va);
+    local_flush_icache_all();
 }
 
 void init_exception()
@@ -45,9 +74,9 @@ void init_exception()
     exc_table[EXCC_LOAD_ACCESS]      = handle_other;
     exc_table[EXCC_STORE_ACCESS]     = handle_other;
     exc_table[EXCC_SYSCALL]          = handle_syscall;
-    exc_table[EXCC_INST_PAGE_FAULT]  = handle_other;
-    exc_table[EXCC_LOAD_PAGE_FAULT]  = handle_other;
-    exc_table[EXCC_STORE_PAGE_FAULT] = handle_other;
+    exc_table[EXCC_INST_PAGE_FAULT]  = handle_page_fault;
+    exc_table[EXCC_LOAD_PAGE_FAULT]  = handle_page_fault;
+    exc_table[EXCC_STORE_PAGE_FAULT] = handle_page_fault;
 
 
     /* TODO: [p2-task4] initialize irq_table */

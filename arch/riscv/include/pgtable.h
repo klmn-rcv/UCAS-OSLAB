@@ -152,6 +152,7 @@ static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
     uint64_t vpn0 = (vpn2 << (PPN_BITS + PPN_BITS)) ^
                     (vpn1 << PPN_BITS) ^
                     (va >> NORMAL_PAGE_SHIFT);
+    uint64_t offset = va & ((1 << NORMAL_PAGE_SHIFT) - 1);
     if(pgd[vpn2] == 0) {
         *success = 0;
         return 0;
@@ -159,8 +160,8 @@ static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
     if(isLeaf(pgd[vpn2])) {
         *success = 1;
         // printl("DEBUG 1!!!!!!!! vpn2 is: %lx, vpn1 is %lx, vpn0 is %lx\n", vpn2, vpn1, vpn0);
-        // assert(0);
-        return pa2kva(get_pa(pgd[vpn2]));
+        assert(0);
+        return pa2kva(get_pa(pgd[vpn2]) | (vpn1 << (NORMAL_PAGE_SHIFT + PPN_BITS)) | (vpn0 << NORMAL_PAGE_SHIFT) | offset);
     }
 
     PTE *pmd = (PTE *)pa2kva(get_pa(pgd[vpn2]));
@@ -171,8 +172,8 @@ static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
     if(isLeaf(pmd[vpn1])) {
         *success = 1;
         // printl("DEBUG 2!!!!!!!! vpn2 is: %lx, vpn1 is %lx, vpn0 is %lx\n", vpn2, vpn1, vpn0);
-        // assert(0);
-        return pa2kva(get_pa(pmd[vpn1]));
+        assert(0);
+        return pa2kva(get_pa(pmd[vpn1]) | (vpn0 << NORMAL_PAGE_SHIFT) | offset);
     }
     
     PTE *pt = (PTE *)pa2kva(get_pa(pmd[vpn1]));
@@ -182,7 +183,7 @@ static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
     }
     if(isLeaf(pt[vpn0])) {
         *success = 1;
-        return pa2kva(get_pa(pt[vpn0]));
+        return pa2kva(get_pa(pt[vpn0]) | offset);
     }
     else
         assert(0);

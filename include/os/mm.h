@@ -38,7 +38,7 @@
 #define FREEMEM_KERNEL_END 0xffffffc060000000
 #define PAGE_TOTAL_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
 
-#define USER_STACK_PAGE_NUM 10
+#define USER_STACK_PAGE_NUM 20
 
 ////////////////////////////////////////////////////////////////
 // #define INIT_USER_STACK 0x52500000      // 要改！！！！！
@@ -68,7 +68,7 @@ extern ptr_t allocLargePage(int numPage);
 // TODO [P4-task1] */
 extern void* kmalloc(size_t size);
 extern void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir);
-extern uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir);
+extern uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir, PTE *pte, int *already_exist);
 
 // TODO [P4-task4]: shm_page_get/dt */
 uintptr_t shm_page_get(int key);

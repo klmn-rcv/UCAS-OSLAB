@@ -104,10 +104,11 @@ void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir)
 /* allocate physical page for `va`, mapping it into `pgdir`,
    return the kernel virtual address for the page
    */
-uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir)
+uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir, PTE *pte, int *already_exist)
 {
 
     // printl("pgdir: %lx\n", pgdir);
+    // printl("va: %lx\n", va);
 
     // TODO [P4-task1] alloc_page_helper:
     PTE *pgd = (PTE *)pgdir;
@@ -121,7 +122,7 @@ uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir)
                     (vpn1 << PPN_BITS) ^
                     (va >> NORMAL_PAGE_SHIFT);
 
-    // printl("mm.c: vpn2 is: %lx, vpn1 is: %lx, vpn0 is: %lx\n", vpn2, vpn1, vpn0);
+    // printl("mm.c: pgdir is: %lx, va is: %lx, vpn2 is: %lx, vpn1 is: %lx, vpn0 is: %lx\n", pgdir, va, vpn2, vpn1, vpn0);
 
     if (pgd[vpn2] == 0) {
         // 注意：set_pfn要先转换成物理地址
@@ -141,14 +142,19 @@ uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir)
 
     // printl("DEBUG: pt[511] is: %lx, &pt[511] is: %lx\n", pt[511], &pt[511]);
     
-    // 这个if判断是否需要？？？
     if(pt[vpn0] == 0) {
+        *already_exist = 0;
         set_pfn(&pt[vpn0], kva2pa(allocPage(1)) >> NORMAL_PAGE_SHIFT);
     }
+    else {
+        *already_exist = 1;
+    }
+    
     set_attribute(
         &pt[vpn0], _PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE |
                         _PAGE_EXEC | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY);
 
+    *pte = pt[vpn0];
     return pa2kva(get_pa(pt[vpn0]));
 }
 

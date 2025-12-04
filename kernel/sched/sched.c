@@ -80,10 +80,17 @@ static void free_proc_page_table(pid_t pid) {
                 PTE *pmd = (PTE *)pa2kva(get_pa(pgd[i]));
                 for(int j = 0; j < 512; j++) {
                     if(pmd[j] != 0) {
+                        PTE *kernel_pmd = (PTE *)pa2kva(get_pa(pmd[j]));
+                        if(pmd[j] == kernel_pmd[j]) {
+                            continue;
+                        }
+
+
                         if(!isLeaf(pmd[j])) {
                             PTE *pt = (PTE *)pa2kva(get_pa(pmd[j]));
                             for(int k = 0; k < 512; k++) {
                                 if(pt[k] != 0) {
+
                                     if(isLeaf(pt[k])) {
                                         uintptr_t va = (i & (PPN_BITS)) << (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS) |
                                         (j & (PPN_BITS)) << (NORMAL_PAGE_SHIFT + PPN_BITS) |
@@ -186,6 +193,10 @@ void do_scheduler(void)
         local_flush_tlb_all();
         local_flush_icache_all();
 
+        if(current_running->pid == 3) {
+            asm volatile("nop");
+        }
+
         switch_to(prev_pcb, next_pcb);
     }
 }
@@ -258,19 +269,20 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
     // printl("After minus: pcb[pid].user_sp is: %lx\n", pcb[pid].user_sp);
 
     int success = 0;
-    uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, &success) + PAGE_SIZE;
+    uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, &success);
     assert(success);
 
     // printl("DEBUG 3!!! user_sp_kva is %lx\n", user_sp_kva);
 
-    uint32_t sum_len = 0;
+    // uint32_t sum_len = 0;
     char **argv_to_user = (char **)user_sp_kva;
 
     for(int i = 0; i < argc; i++) {
         int len = strlen(argv[i]);
         user_sp_kva -= (len + 1);
-        sum_len += (len + 1);
-        argv_to_user[i] = (char *)user_sp_kva;
+        pcb[pid].user_sp -= (len + 1);
+        // sum_len += (len + 1);
+        argv_to_user[i] = (char *)pcb[pid].user_sp;
         
         for(int j = 0; j < len; j++) {
             *((char *)user_sp_kva + j) = argv[i][j];
@@ -278,7 +290,7 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
         *((char *)user_sp_kva + len) = '\0';
     }
 
-    pcb[pid].user_sp -= sum_len;
+    // pcb[pid].user_sp -= sum_len;
     pcb[pid].user_sp &= 0xFFFFFFFFFFFFFFF0;
 
     pt_regs->regs[2] = pcb[pid].user_sp;  // store sp back to user context

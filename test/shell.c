@@ -140,7 +140,7 @@ int main(void)
                 } else {
                     printf("Info: execute %s successfully, pid = %d ...\n", argv[1], pid);
                 }
-                if(argc >= 3 && strcmp(argv[2], "&") == 0) {
+                if(argc >= 3 && strcmp(argv[argc - 1], "&") == 0) {
                     continue;
                 }
                 sys_waitpid(pid);

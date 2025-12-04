@@ -200,8 +200,16 @@ ENDPROC(switch_to)
 ENTRY(ret_from_exception)
   /* TODO: [p2-task3] restore context via provided macro and return to sepc */
   /* HINT: remember to check your sp, does it point to the right address? */
+
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
+
   call unlock_kernel
   RESTORE_CONTEXT
+
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
+  
   sret
 ENDPROC(ret_from_exception)
 
@@ -229,6 +237,9 @@ ENTRY(exception_handler_entry)
   ld a0, PCB_KERNEL_SP(tp)
   jal ra, interrupt_helper
   la ra, ret_from_exception
+
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
 
   jr ra
 

@@ -148,7 +148,9 @@ int create_task(char *taskname) {
 
     for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
         // printl("main.c: va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
-        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir);
+        PTE pte;
+        int already_exist = 0;
+        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir, &pte, &already_exist);
     }
 
     LIST_INIT_HEAD(&pcb[pid].wait_list);
@@ -343,7 +345,7 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         // printl("Here 1, cpuid: %d\n", cpuid);
 
 
-        // delete_temp_map();
+        delete_temp_map();
 
 
         /*
