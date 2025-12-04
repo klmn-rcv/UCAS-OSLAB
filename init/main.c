@@ -147,6 +147,7 @@ int create_task(char *taskname) {
     pcb[pid].user_sp = USER_STACK_ADDR;
 
     for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
+        // printl("main.c: va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
         alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir);
     }
 
@@ -160,6 +161,7 @@ int create_task(char *taskname) {
     pcb[pid].status = TASK_READY;
     //pcb[pid].run_core_mask = current_running->run_core_mask;
     pcb[pid].run_core_mask = 0x3;
+    pcb[pid].killed = 0;
     
     // LIST_APPEND(&pcb[process_id].list, &ready_queue);
     init_pcb_stack(pcb[pid].kernel_sp, pcb[pid].user_sp, entry_point, &pcb[pid]);
@@ -192,6 +194,7 @@ static void init_pcb(/*uint16_t tasknum*/)
         pcb[i].run_core_mask = 0;
         pcb[i].running_core_id = -1;
         pcb[i].pgdir = allocPage(1);
+        pcb[i].killed = 0;
     }
 
     char *tasknames[TASK_NUM] = {"shell"};
@@ -340,7 +343,7 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         // printl("Here 1, cpuid: %d\n", cpuid);
 
 
-        delete_temp_map();
+        // delete_temp_map();
 
 
         /*

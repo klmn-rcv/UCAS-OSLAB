@@ -97,6 +97,9 @@ typedef struct pcb
     /* Page directory */
     uintptr_t pgdir;
 
+    /* killed signal */
+    int killed;
+
 } pcb_t;
 
 /* Thread Control Block */

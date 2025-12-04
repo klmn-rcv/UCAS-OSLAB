@@ -79,6 +79,7 @@ void freePage(ptr_t baseAddr)
 {
     // TODO [P4-task1] (design you 'freePage' here if you need):
     int id = (baseAddr - FREEMEM_KERNEL) / PAGE_SIZE;
+    // printl("id: %d\n", id);
     assert(id >= 0 && id < PAGE_TOTAL_NUM);
     alloc_record[id] = 0;
 }
@@ -105,9 +106,13 @@ void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir)
    */
 uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir)
 {
+
+    // printl("pgdir: %lx\n", pgdir);
+
     // TODO [P4-task1] alloc_page_helper:
     PTE *pgd = (PTE *)pgdir;
     va &= VA_MASK;
+    // printl("mm.c: va is: %lx\n", va);
     uint64_t vpn2 =
         va >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
     uint64_t vpn1 = (vpn2 << PPN_BITS) ^
@@ -115,6 +120,8 @@ uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir)
     uint64_t vpn0 = (vpn2 << (PPN_BITS + PPN_BITS)) ^
                     (vpn1 << PPN_BITS) ^
                     (va >> NORMAL_PAGE_SHIFT);
+
+    // printl("mm.c: vpn2 is: %lx, vpn1 is: %lx, vpn0 is: %lx\n", vpn2, vpn1, vpn0);
 
     if (pgd[vpn2] == 0) {
         // 注意：set_pfn要先转换成物理地址
@@ -131,6 +138,8 @@ uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir)
     }
 
     PTE *pt = (PTE *)pa2kva(get_pa(pmd[vpn1]));
+
+    // printl("DEBUG: pt[511] is: %lx, &pt[511] is: %lx\n", pt[511], &pt[511]);
     
     // 这个if判断是否需要？？？
     if(pt[vpn0] == 0) {

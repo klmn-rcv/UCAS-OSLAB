@@ -158,6 +158,8 @@ static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
     }
     if(isLeaf(pgd[vpn2])) {
         *success = 1;
+        // printl("DEBUG 1!!!!!!!! vpn2 is: %lx, vpn1 is %lx, vpn0 is %lx\n", vpn2, vpn1, vpn0);
+        // assert(0);
         return pa2kva(get_pa(pgd[vpn2]));
     }
 
@@ -168,6 +170,8 @@ static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
     }
     if(isLeaf(pmd[vpn1])) {
         *success = 1;
+        // printl("DEBUG 2!!!!!!!! vpn2 is: %lx, vpn1 is %lx, vpn0 is %lx\n", vpn2, vpn1, vpn0);
+        // assert(0);
         return pa2kva(get_pa(pmd[vpn1]));
     }
     
