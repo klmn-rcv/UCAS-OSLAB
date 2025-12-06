@@ -17,6 +17,17 @@ handler_t exc_table[EXCC_COUNT];
 
 void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
 {
+    // if(current_running->pid == 3) {
+    //     printl("Entering interrupt_helper, regs is : %lx, t0 is: %lx, sepc is: %lx\n", regs, regs->regs[5], regs->sepc);
+    //     // asm volatile("nop");
+    // }
+
+    // printl("Entering interrupt_helper, pid3-t0 is: %lx, pid is: %d, sepc is: %lx\n", *(reg_t *)0xffffffc05203ef08lu, current_running->pid, regs->sepc);
+
+    // if(*(reg_t *)0xffffffc05203ef08lu == 0x4051e) {
+    //     asm volatile("nop");
+    // }
+
     cpuid = get_current_cpu_id();
     // TODO: [p2-task3] & [p2-task4] interrupt handler.
     // call corresponding handler by the value of `scause`
@@ -39,6 +50,20 @@ void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
         else assert(0);
     }
     // handle_other(regs, stval, scause);
+
+    // if(current_running->pid == 3) {
+    //     printl("Exiting interrupt_helper, regs is : %lx, t0 is: %lx, sepc is: %lx\n", regs, regs->regs[5], regs->sepc);
+    //     // asm volatile("nop");
+    // }
+
+
+    // pid3-t0 is: 1200a, pid is: 3, sepc is: 1000e
+
+    // printl("Leaving interrupt_helper, pid3-t0 is: %lx, pid is: %d, sepc is: %lx\n", *(reg_t *)0xffffffc05203ef08lu, current_running->pid, regs->sepc);
+
+    // if(*(reg_t *)0xffffffc05203ef08lu == 0x1200a && current_running->pid == 3 && regs->sepc == 0x1000e) {
+    //     asm volatile("nop");
+    // }
 }
 
 void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)
@@ -55,9 +80,17 @@ void handle_page_fault(regs_context_t *regs, uint64_t stval, uint64_t scause) {
     uintptr_t va = stval & VA_MASK;  // 触发缺页的虚拟地址
     uintptr_t pgdir = current_running->pgdir;
     // PTE* pte = page_walk(pgdir, va);  // 查找页表项
-    PTE pte;
+    // PTE pte;
     int already_exist = 0;
-    uintptr_t physic_page_kva = alloc_page_helper(va, pgdir, &pte, &already_exist);
+    uintptr_t physic_page_kva = alloc_page_helper(va, current_running->pid, pgdir, &already_exist);
+    // if(already_exist) {
+    //     if(!(pte & _PAGE_PRESENT)) {
+    //         assert(0);
+    //     }
+    //     else {
+    //         assert(0);
+    //     }
+    // }
     
     // 刷新TLB
     local_flush_tlb_page(va);

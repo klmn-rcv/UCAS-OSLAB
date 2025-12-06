@@ -28,6 +28,7 @@
 
 #include <type.h>
 #include <pgtable.h>
+#include <os/list.h>
 
 #define MAP_KERNEL 1
 #define MAP_USER 2
@@ -36,8 +37,12 @@
 #define INIT_KERNEL_STACK 0xffffffc052000000
 #define FREEMEM_KERNEL (INIT_KERNEL_STACK+2*PAGE_SIZE) // 前两页分别作为了主核和从核的kernel stack
 #define FREEMEM_KERNEL_END 0xffffffc060000000
-#define PAGE_TOTAL_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
+// #define PAGE_MAX_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
+#define PAGE_MAX_NUM 2000
 
+#define SD_SWAP_SECTOR_NUM 80000
+
+#define KERNEL_STACK_PAGE_NUM 2
 #define USER_STACK_PAGE_NUM 20
 
 ////////////////////////////////////////////////////////////////
@@ -49,7 +54,22 @@
 #define ROUND(a, n)     (((((uint64_t)(a))+(n)-1)) & ~((n)-1))
 #define ROUNDDOWN(a, n) (((uint64_t)(a)) & ~((n)-1))
 
-extern ptr_t allocPage(int numPage);
+typedef struct {
+    list_node_t list;       /* 链表节点，用于管理页框 */
+    PTE *pte_ptr;           /* 指向对应 PTE 的内核地址（如果存在） */
+    pid_t owner_pid;        /* 页所属进程的 PID */
+    uint16_t id;            /* 页框编号 */
+    int8_t alloc_record;    /* 页框分配记录，0 表示空闲，1 表示已分配 */
+    int8_t unswapable;      /* 页框被用作内核栈或页表，不参与换入换出机制 */
+} pageframe_t;
+
+int getPageId(uintptr_t kva);
+extern void init_pageframe_manager();
+
+ptr_t allocKernelPage(int numPage, pid_t pid);
+void freeKernelPage(uintptr_t start_page, int numPage);
+
+extern ptr_t allocPage(pid_t pid, PTE *pte_ptr, int unswapable);
 // extern ptr_t allocUserPage(int numPage);
 // TODO [P4-task1] */
 void freePage(ptr_t baseAddr);
@@ -68,7 +88,12 @@ extern ptr_t allocLargePage(int numPage);
 // TODO [P4-task1] */
 extern void* kmalloc(size_t size);
 extern void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir);
-extern uintptr_t alloc_page_helper(uintptr_t va, uintptr_t pgdir, PTE *pte, int *already_exist);
+extern uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte, */int *already_exist);
+void swap_out(pageframe_t *pageframe);
+void swap_in(PTE *pte_ptr, pid_t pid, int unswapable);
+int alloc_sd_sector(void);
+void free_sd_sector(int begin);
+uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, pid_t pid, int *success);
 
 // TODO [P4-task4]: shm_page_get/dt */
 uintptr_t shm_page_get(int key);

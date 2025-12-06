@@ -142,51 +142,20 @@ static inline int isLeaf(PTE entry) {
     }
 }
 
-static inline uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, int *success) {
-    PTE *pgd = (PTE *)pgdir;
-    va &= VA_MASK;
+// 内核页表PTE查找
+static PTE *kva2pte(uintptr_t kva) {
+    PTE *pgd = (PTE *)pa2kva(PGDIR_PA);
+    kva &= VA_MASK;
     uint64_t vpn2 =
-        va >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
+        kva >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
     uint64_t vpn1 = (vpn2 << PPN_BITS) ^
-                    (va >> (NORMAL_PAGE_SHIFT + PPN_BITS));
-    uint64_t vpn0 = (vpn2 << (PPN_BITS + PPN_BITS)) ^
-                    (vpn1 << PPN_BITS) ^
-                    (va >> NORMAL_PAGE_SHIFT);
-    uint64_t offset = va & ((1 << NORMAL_PAGE_SHIFT) - 1);
-    if(pgd[vpn2] == 0) {
-        *success = 0;
-        return 0;
-    }
-    if(isLeaf(pgd[vpn2])) {
-        *success = 1;
-        // printl("DEBUG 1!!!!!!!! vpn2 is: %lx, vpn1 is %lx, vpn0 is %lx\n", vpn2, vpn1, vpn0);
-        assert(0);
-        return pa2kva(get_pa(pgd[vpn2]) | (vpn1 << (NORMAL_PAGE_SHIFT + PPN_BITS)) | (vpn0 << NORMAL_PAGE_SHIFT) | offset);
-    }
+                    (kva >> (NORMAL_PAGE_SHIFT + PPN_BITS));
 
+    assert(pgd[vpn2]);
     PTE *pmd = (PTE *)pa2kva(get_pa(pgd[vpn2]));
-    if(pmd[vpn1] == 0) {
-        *success = 0;
-        return 0;
-    }
-    if(isLeaf(pmd[vpn1])) {
-        *success = 1;
-        // printl("DEBUG 2!!!!!!!! vpn2 is: %lx, vpn1 is %lx, vpn0 is %lx\n", vpn2, vpn1, vpn0);
-        assert(0);
-        return pa2kva(get_pa(pmd[vpn1]) | (vpn0 << NORMAL_PAGE_SHIFT) | offset);
-    }
-    
-    PTE *pt = (PTE *)pa2kva(get_pa(pmd[vpn1]));
-    if(pt[vpn0] == 0) {
-        *success = 0;
-        return 0;
-    }
-    if(isLeaf(pt[vpn0])) {
-        *success = 1;
-        return pa2kva(get_pa(pt[vpn0]) | offset);
-    }
-    else
-        assert(0);
+    assert(pmd[vpn1]);
+
+    return &pmd[vpn1];
 }
 
 #endif  // PGTABLE_H

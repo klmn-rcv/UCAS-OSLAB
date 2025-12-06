@@ -254,9 +254,9 @@ static void write_img_info(int nbytes_kernel, task_info_t *taskinfo,
     fseek(img, TASK_INFO_OFFSET_LOC, SEEK_SET);
     fwrite(phyaddr, 4, 1, img);
 
-    printf("DEBUG: *phyaddr: %d\n", *phyaddr);
-    printf("DEBUG: %s\n", taskinfo[1].taskname);
-    printf("DEBUG: sizeof(task_info_t) is %d\n", sizeof(task_info_t));
+    // printf("DEBUG: *phyaddr: %d\n", *phyaddr);
+    // printf("DEBUG: %s\n", taskinfo[1].taskname);
+    // printf("DEBUG: sizeof(task_info_t) is %d\n", sizeof(task_info_t));
 
     // p1-task4:
     fseek(img, *phyaddr, SEEK_SET);

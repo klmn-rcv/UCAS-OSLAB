@@ -27,6 +27,8 @@ task_info_t tasks[TASK_MAXNUM];
 static uint16_t tasknum;
 static uint32_t task_info_offset;
 
+uint32_t last_nonempty_sector;
+
 static void init_jmptab(void)
 {
     volatile long (*(*jmptab))() = (volatile long (*(*))())KERNEL_JMPTAB_BASE;
@@ -65,6 +67,9 @@ static void init_task_info(/*uint16_t tasknum, uint32_t task_info_offset*/)
     uint32_t task_info_size = sizeof(task_info_t) * tasknum;
     unsigned begin_sector = NBYTES2SEC(task_info_offset) - 1;
     unsigned end_sector = NBYTES2SEC(task_info_offset + task_info_size) - 1;
+
+    last_nonempty_sector = end_sector + 8; // 加8防止意外覆盖
+
     unsigned num_sector = end_sector - begin_sector + 1;
     uintptr_t mem_address = TASK_MEM_BASE + TASK_SIZE * tasknum;
     bios_sd_read(mem_address, num_sector, begin_sector);
@@ -134,7 +139,7 @@ int create_task(char *taskname) {
         return 0;
     }
 
-    ptr_t entry_point = map_and_load_task_img(taskname, pcb[pid].pgdir, tasks, tasknum);
+    ptr_t entry_point = map_and_load_task_img(taskname, pid, pcb[pid].pgdir, tasks, tasknum);
     
     
     // pcb[pid].kernel_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
@@ -142,15 +147,18 @@ int create_task(char *taskname) {
     // pcb[pid].kernel_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
     // pcb[pid].user_stack_base = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
 
-    pcb[pid].kernel_sp = allocPage(2) + 2 * PAGE_SIZE;
+    pcb[pid].kernel_sp = allocKernelPage(KERNEL_STACK_PAGE_NUM, pid) + KERNEL_STACK_PAGE_NUM * PAGE_SIZE;
+
+    pcb[pid].kernel_stack_start_page = pcb[pid].kernel_sp - KERNEL_STACK_PAGE_NUM * PAGE_SIZE;
+
     // pcb[pid].user_sp = allocUserPage(1) + PAGE_SIZE;
     pcb[pid].user_sp = USER_STACK_ADDR;
 
     for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
         // printl("main.c: va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
-        PTE pte;
+        // PTE pte;
         int already_exist = 0;
-        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir, &pte, &already_exist);
+        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pid, pcb[pid].pgdir, &already_exist);
     }
 
     LIST_INIT_HEAD(&pcb[pid].wait_list);
@@ -183,6 +191,7 @@ static void init_pcb(/*uint16_t tasknum*/)
     for(int i = 2; i < NUM_MAX_TASK; i++) {
         pcb[i].kernel_sp = 0;
         pcb[i].user_sp = 0;
+        pcb[i].kernel_stack_start_page = 0;
         // pcb[i].kernel_stack_base = 0;
         // pcb[i].user_stack_base = 0;
         LIST_INIT_HEAD(&pcb[i].wait_list);
@@ -195,7 +204,8 @@ static void init_pcb(/*uint16_t tasknum*/)
         pcb[i].wakeup_time = 0;
         pcb[i].run_core_mask = 0;
         pcb[i].running_core_id = -1;
-        pcb[i].pgdir = allocPage(1);
+        printl("Here!!!\n");
+        pcb[i].pgdir = allocPage(i, NULL, 1);
         pcb[i].killed = 0;
     }
 
@@ -314,6 +324,8 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         // printk("task_info_offset is: %d\n", task_info_offset);
 
         init_task_info(/*tasknum, task_info_offset*/);
+
+        init_pageframe_manager();
 
         // Init Process Control Blocks |•'-'•) ✧
         init_pcb(/*tasknum*/);

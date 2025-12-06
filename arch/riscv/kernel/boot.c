@@ -95,6 +95,11 @@ static void ARRTIBUTE_BOOTKERNEL setup_vm()
     PTE *early_pgdir = (PTE *)PGDIR_PA;
     for (uint64_t kva = 0xffffffc050000000lu;
          kva < 0xffffffc060000000lu; kva += 0x200000lu) {
+
+        if(kva == 0xffffffc052000000lu) {
+            asm volatile("nop");
+        }
+
         map_page(kva, kva2pa(kva), early_pgdir);
     }
     // map boot address

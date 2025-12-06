@@ -40,16 +40,17 @@ uint64_t load_task_img(char *taskname, task_info_t tasks[], uint16_t tasknum)
 }
 
 static void load_from_sd(uintptr_t dest_mem, uint32_t begin_off, uint32_t end_off) {
+    unsigned long dest_mem_pa = kva2pa(dest_mem);
     if(begin_off != end_off) {
         unsigned begin_sector = NBYTES2SEC(begin_off) - 1;
         unsigned end_sector = NBYTES2SEC(end_off) - 1;
         unsigned num_sector = end_sector - begin_sector + 1;
-        bios_sd_read_wrapper((unsigned)dest_mem, num_sector, begin_sector);
+        bios_sd_read_wrapper(dest_mem_pa, num_sector, begin_sector);
         memcpy((uint8_t *)dest_mem, (uint8_t *)(dest_mem + (begin_off % SECTOR_SIZE)), end_off - begin_off); 
     }
 }
 
-uint64_t map_and_load_task_img(char *taskname, uintptr_t pgdir, task_info_t tasks[], uint16_t tasknum)
+uint64_t map_and_load_task_img(char *taskname, pid_t pid, uintptr_t pgdir, task_info_t tasks[], uint16_t tasknum)
 {
     task_info_t task_info;
     int success = 0;
@@ -77,9 +78,9 @@ uint64_t map_and_load_task_img(char *taskname, uintptr_t pgdir, task_info_t task
     
     for(; va < va_mem_end; va += PAGE_SIZE) {
         // printl("loader.c: va: %lx\n", va);
-        PTE pte;
+        // PTE pte;
         int already_exist = 0;
-        uintptr_t load_dest = alloc_page_helper(va, pgdir, &pte, &already_exist);
+        uintptr_t load_dest = alloc_page_helper(va, pid, pgdir, &already_exist);
         uint64_t copy_size = (va_mem_end - va > PAGE_SIZE) ? PAGE_SIZE : (va_mem_end - va);
         uint64_t remain_filesz = (va_file_end - va > 0) ? (va_file_end - va) : 0;
         

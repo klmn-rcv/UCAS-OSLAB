@@ -57,11 +57,16 @@ static void clear_wait_list(pid_t pid) {
     }
 }
 
-static void free_user_stack_page(pid_t pid) {
+static void free_stack_page(pid_t pid) {
+    // free kernel stack page
+    freeKernelPage(pcb[pid].kernel_stack_start_page, KERNEL_STACK_PAGE_NUM);
+
+    // free user stack page
     for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
         int success = 0;
-        uintptr_t user_stack_page_kva = va2kva(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir, &success);
+        uintptr_t user_stack_page_kva = va2kva(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir, pid, &success);
         assert(success);
+        printl("freePage 1\n");
         freePage(user_stack_page_kva);
     }
 }
@@ -70,6 +75,10 @@ static void free_proc_page_table(pid_t pid) {
     PTE *pgd = (PTE *)pcb[pid].pgdir;
     for(int i = 0; i < 512; i++) {
         if(pgd[i] != 0) {
+            if((pgd[i] & _PAGE_PRESENT) == 0) {
+                assert(0);
+            }
+
             // 不能删掉内核页表！（因为内核和用户共用内核二级页表）
             PTE *kernel_pgd = (PTE *)pa2kva(PGDIR_PA);
             if(pgd[i] == kernel_pgd[i]) {
@@ -80,22 +89,29 @@ static void free_proc_page_table(pid_t pid) {
                 PTE *pmd = (PTE *)pa2kva(get_pa(pgd[i]));
                 for(int j = 0; j < 512; j++) {
                     if(pmd[j] != 0) {
+                        if((pmd[j] & _PAGE_PRESENT) == 0) {
+                            assert(0);
+                        }
+
                         PTE *kernel_pmd = (PTE *)pa2kva(get_pa(pmd[j]));
                         if(pmd[j] == kernel_pmd[j]) {
                             continue;
                         }
 
-
                         if(!isLeaf(pmd[j])) {
                             PTE *pt = (PTE *)pa2kva(get_pa(pmd[j]));
                             for(int k = 0; k < 512; k++) {
                                 if(pt[k] != 0) {
+                                    if((pt[k] & _PAGE_PRESENT) == 0) {
+                                        swap_in(&pt[k], pid, 0);
+                                    }
 
                                     if(isLeaf(pt[k])) {
                                         uintptr_t va = (i & (PPN_BITS)) << (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS) |
                                         (j & (PPN_BITS)) << (NORMAL_PAGE_SHIFT + PPN_BITS) |
                                         (k & (PPN_BITS)) << NORMAL_PAGE_SHIFT;
                                         local_flush_tlb_page(va);
+                                        printl("freePage 2\n");
                                         freePage(pa2kva(get_pa(pt[k])));
                                         pt[k] = 0;
                                     }
@@ -105,12 +121,16 @@ static void free_proc_page_table(pid_t pid) {
                                 }
                             }
                         }
+                        printl("freePage 3\n");
                         freePage(pa2kva(get_pa(pmd[j])));
+                        // freeKernelPage(pa2kva(get_pa(pmd[j])), 1);
                         pmd[j] = 0;
                     }
                 }
             }
+            printl("freePage 4\n");
             freePage(pa2kva(get_pa(pgd[i])));
+            // freeKernelPage(pa2kva(get_pa(pgd[i])), 1);
             pgd[i] = 0;
         }
     }
@@ -121,8 +141,9 @@ static void bury(pid_t pid) {
     pcb[pid].killed = 0;
     do_mutex_lock_free(pid);
     clear_wait_list(pid);
-    free_user_stack_page(pid);
+    free_stack_page(pid);
     free_proc_page_table(pid);
+    // LIST_DELETE(&pcb[pid].list);
 }
 
 static list_node_t *find_next_node() {
@@ -151,6 +172,7 @@ void do_scheduler(void)
     // TODO: [p2-task1] Modify the current_running pointer.
 
     if (current_running->killed) {
+        printl("bury 2\n");
         bury(current_running->pid);
     }
     else if (current_running->status == TASK_RUNNING) {
@@ -178,6 +200,7 @@ void do_scheduler(void)
             LIST_DELETE(next_node);
 
             if(next_pcb->killed) {
+                printl("bury 3\n");
                 bury(next_pcb->pid);
                 need_another_search = 1;
             }
@@ -269,7 +292,7 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
     // printl("After minus: pcb[pid].user_sp is: %lx\n", pcb[pid].user_sp);
 
     int success = 0;
-    uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, &success);
+    uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, pid, &success);
     assert(success);
 
     // printl("DEBUG 3!!! user_sp_kva is %lx\n", user_sp_kva);
@@ -302,8 +325,11 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
 }
 
 void do_exit(void) {
+    printl("Enter do_exit, current_running->pid is %d\n", current_running->pid);
+    
     bury(current_running->pid);
     do_scheduler();
+    printl("Exit do_exit\n");
 }
 
 int do_kill(pid_t pid) {

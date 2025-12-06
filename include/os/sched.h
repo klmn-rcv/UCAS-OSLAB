@@ -71,6 +71,8 @@ typedef struct pcb
     // ptr_t kernel_stack_base;
     // ptr_t user_stack_base;
 
+    reg_t kernel_stack_start_page;
+
     /* previous, next pointer */
     list_node_t list;
     list_head wait_list;

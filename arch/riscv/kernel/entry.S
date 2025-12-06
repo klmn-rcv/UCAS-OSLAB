@@ -53,8 +53,11 @@
    * Disable the FPU to detect illegal usage of floating point in kernel
    * space.
    */
-  li t0, SR_SUM | SR_FS
+  li t0, SR_FS
   csrc sstatus, t0
+
+  li t0, SR_SUM
+  csrs sstatus, t0
 
   /* TODO: [p2-task3] save sstatus, sepc, stval and scause on kernel stack */
   csrr t0, sstatus
@@ -207,9 +210,6 @@ ENTRY(ret_from_exception)
   call unlock_kernel
   RESTORE_CONTEXT
 
-  li t0, SR_SUM
-  csrs CSR_SSTATUS, t0
-  
   sret
 ENDPROC(ret_from_exception)
 
