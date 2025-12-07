@@ -158,6 +158,7 @@ int create_task(char *taskname) {
         // printl("main.c: va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
         // PTE pte;
         int already_exist = 0;
+        printl("alloc_page_helper 1, va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
         alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pid, pcb[pid].pgdir, &already_exist);
     }
 

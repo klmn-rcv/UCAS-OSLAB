@@ -56,6 +56,7 @@ int alloc_sd_sector(void) { // 返回分配的8个sector中第一个的下标
 
 void free_sd_sector(int begin) {
     for(int i = begin; i < begin + PAGE_SIZE / SECTOR_SIZE; i++) {
+        printl("free_sd_sector: free sector %d\n", i);
         assert(sd_record[i] == 1);
         sd_record[i] = 0;
     }
@@ -110,9 +111,9 @@ pageframe_t *dequeue_pageframe() {
         assert(pageframe->unswapable == 0);
 
         swap_out(pageframe);
-        LIST_DELETE(&pageframe->list);
-        pageframe->alloc_record = 0;
-        pageframe->owner_pid = -1;
+        // LIST_DELETE(&pageframe->list);
+        // pageframe->alloc_record = 0;
+        // pageframe->owner_pid = -1;
         // allocated_pageframe_count--;
         
         printl("Exit dequeue_pageframe...\n");
@@ -169,7 +170,41 @@ ptr_t allocKernelPage(int numPage, pid_t pid) {
                 memset((uint8_t *)page_addr, 0, numPage * PAGE_SIZE);
                 return page_addr;
             }
-        } 
+        }
+        else {
+            count = 0;
+            start = -1;
+        }
+    }
+
+    for(int i = 0; i < PAGE_MAX_NUM; i++) {
+        if((pageframes[i].alloc_record == 0) || (pageframes[i].unswapable == 0)) {
+            if (count == 0) {
+                start = i;
+            }
+            count++;
+            if (count == numPage) {
+                for (int j = start; j < start + numPage; j++) {
+                    if(pageframes[j].alloc_record == 0) {
+                        pageframes[j].alloc_record = 1;
+                        pageframes[j].owner_pid = pid;
+                        pageframes[j].pte_ptr = NULL;   // 不需要PTE信息（不是没有）
+                        pageframes[j].unswapable = 1;
+                    }
+                    else  {
+                        assert(pageframes[j].unswapable == 0);
+                        swap_out(&pageframes[j]);
+                        pageframes[j].alloc_record = 1;
+                        pageframes[j].owner_pid = pid;
+                        pageframes[j].pte_ptr = NULL;   // 不需要PTE信息（不是没有）
+                        pageframes[j].unswapable = 1;
+                    }
+                }
+                ptr_t page_addr = FREEMEM_KERNEL + start * PAGE_SIZE;
+                memset((uint8_t *)page_addr, 0, numPage * PAGE_SIZE);
+                return page_addr;
+            }
+        }
         else {
             count = 0;
             start = -1;
@@ -195,6 +230,7 @@ void freeKernelPage(uintptr_t start_page, int numPage) {
 
 // 分配物理页框
 ptr_t allocPage(pid_t pid, PTE *pte_ptr, int unswapable) {
+
     printl("Enter allocPage...\n");
     for (int i = 0; i < PAGE_MAX_NUM; i++) {
         if(pageframes[i].alloc_record == 0) {
@@ -255,6 +291,12 @@ ptr_t allocPage(pid_t pid, PTE *pte_ptr, int unswapable) {
     //     pageframe->pte_ptr = kva2pte(page_addr);
     // }
     
+    // static int alloc_count = 0;
+    // alloc_count++;
+    // if(alloc_count == 5358) {
+    //     asm volatile("nop");
+    // }
+    
     printl("Exit allocPage...\n");
     return page_addr;
 }
@@ -310,13 +352,13 @@ void freePage(ptr_t baseAddr)
 
 void swap_out(pageframe_t *pageframe)
 {
-    static int count_swap_out = 0;
-    count_swap_out++;
+    // static int count_swap_out = 0;
+    // count_swap_out++;
     printl("Enter swap_out...\n");
 
-    if(count_swap_out == 31) {
-        asm volatile("nop");
-    }
+    // if(count_swap_out == 31) {
+    //     asm volatile("nop");
+    // }
 
     assert(pageframe);
     assert(pageframe->alloc_record == 1);
@@ -354,6 +396,11 @@ void swap_out(pageframe_t *pageframe)
 
     *(pageframe->pte_ptr) &= ~((uint64_t)_PAGE_PRESENT);
     // pcb[pageframe->owner_pid]
+
+    LIST_DELETE(&pageframe->list);
+    pageframe->alloc_record = 0;
+    pageframe->owner_pid = -1;
+    pageframe->pte_ptr = NULL;
 
     printl("Exit swap_out...\n");
 }
@@ -420,6 +467,11 @@ void swap_in(PTE *pte_ptr, pid_t pid, int unswapable)
     uint64_t begin_sector = (get_pa(*(pte_ptr)) >> NORMAL_PAGE_SHIFT) - 1;
 
     ptr_t page_pa = kva2pa(page_kva);
+
+    if(begin_sector >  1000000) {
+        printl("PANIC: begin_sector is %lu\n", begin_sector);
+        // assert(0);
+    }
 
     printl("mm.c: page_pa: %lx, begin_sector: %lu\n", page_pa, begin_sector);
 
@@ -497,6 +549,7 @@ uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, pid_t pid, int *success) {
         // *success = 0;
         // assert(0);
         // return 0;
+        printl("swap_in 1\n");
         swap_in(&pt[vpn0], pid, 0);
     }
     if(isLeaf(pt[vpn0])) {
@@ -571,6 +624,7 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
         // pageframe_t *pageframe = dequeue_pageframe();
         // assert(pageframe != NULL);
         // printl("Here 2\n");
+        printl("swap_in 2\n");
         swap_in(&pgd[vpn2], pid, 1);
         // pageframe->owner_pid = pid;
     }
@@ -598,6 +652,7 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
         // pageframe_t *pageframe = dequeue_pageframe();
         // assert(pageframe != NULL);
         // printl("Here 3\n");
+        printl("swap_in 3\n");
         swap_in(&pmd[vpn1], pid, 1);
         // pageframe->owner_pid = pid;
     }
@@ -605,6 +660,11 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
     PTE *pt = (PTE *)pa2kva(get_pa(pmd[vpn1]));
 
     // printl("DEBUG: pt[511] is: %lx, &pt[511] is: %lx\n", pt[511], &pt[511]);
+    
+    if(&pt[vpn0] == 0xffffffc052011000lu) {
+        printl("1, pt[vpn0]: %lx\n", pt[vpn0]);
+    }
+
     
     if(pt[vpn0] == 0) {
 
@@ -626,6 +686,11 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
         // pageframe_t *pageframe = dequeue_pageframe();
         // assert(pageframe != NULL);
         // printl("Here 4\n");
+        printl("swap_in 4\n");
+        if(&pt[vpn0] == 0xffffffc052011000lu) {
+            printl("2, pt[vpn0]: %lx\n", pt[vpn0]);
+        }
+
         swap_in(&pt[vpn0], pid, 0);
         // pageframe->owner_pid = pid;
         *already_exist = 1;

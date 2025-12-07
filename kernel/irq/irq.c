@@ -8,6 +8,7 @@
 #include <printk.h>
 #include <assert.h>
 #include <screen.h>
+#include <csr.h>
 
 #define SCAUSE_IRQ_FLAG   (1UL << 63)
 #define LENGTH 60
@@ -38,6 +39,11 @@ void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
     // } else {
     //     handle_other(regs, stval, scause);
     // }
+
+    if((regs->sstatus & SR_SPP) && (scause == EXCC_INST_PAGE_FAULT || scause == EXCC_LOAD_PAGE_FAULT || scause == EXCC_STORE_PAGE_FAULT)) {
+        printl("Kernel page fault detected! stval: %lx, scause: %lx, sepc: %lx, pid: %d\n", stval, scause, regs->sepc, current_running->pid);
+    }
+
     if(scause & SCAUSE_IRQ_FLAG) {
         uint64_t irq_cause = scause & ~SCAUSE_IRQ_FLAG;
         if (irq_cause < IRQC_COUNT && irq_table[irq_cause])
@@ -82,6 +88,7 @@ void handle_page_fault(regs_context_t *regs, uint64_t stval, uint64_t scause) {
     // PTE* pte = page_walk(pgdir, va);  // 查找页表项
     // PTE pte;
     int already_exist = 0;
+    printl("alloc_page_helper 2, va is: %lx\n", va);
     uintptr_t physic_page_kva = alloc_page_helper(va, current_running->pid, pgdir, &already_exist);
     // if(already_exist) {
     //     if(!(pte & _PAGE_PRESENT)) {

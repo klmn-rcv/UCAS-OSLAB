@@ -103,6 +103,7 @@ static void free_proc_page_table(pid_t pid) {
                             for(int k = 0; k < 512; k++) {
                                 if(pt[k] != 0) {
                                     if((pt[k] & _PAGE_PRESENT) == 0) {
+                                        printl("swap_in 5\n");
                                         swap_in(&pt[k], pid, 0);
                                     }
 

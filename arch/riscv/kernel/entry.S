@@ -113,6 +113,19 @@
   ld t5, OFFSET_REG_T5(sp)
   ld t6, OFFSET_REG_T6(sp)
 
+  
+  ld t0, OFFSET_REG_SSTATUS(sp)
+  andi t0, t0, SR_SPP
+  bnez t0, 1f
+  // user mode
+  la t0, exception_handler_entry
+  csrw stvec, t0
+  j 2f
+1:  // kernel mode
+  la t0, exception_handler_kernel_trap_entry
+  csrw stvec, t0
+2:
+
   ld t0, OFFSET_REG_SSTATUS(sp)
   csrw sstatus, t0
   ld t0, OFFSET_REG_SEPC(sp)
@@ -218,6 +231,12 @@ ENTRY(exception_handler_entry)
   /* TODO: [p2-task3] save context via the provided macro */
   SAVE_CONTEXT
 
+  /* 设置内核异常的stvec */
+  la t0, exception_handler_kernel_trap_entry
+  csrw stvec, t0
+  li t0, 3
+  csrc stvec, t0
+
   /* TODO: [p2-task3] load ret_from_exception into $ra so that we can return to
    * ret_from_exception when interrupt_help complete.
    */
@@ -244,3 +263,92 @@ ENTRY(exception_handler_entry)
   jr ra
 
 ENDPROC(exception_handler_entry)
+
+.macro SAVE_CONTEXT_KERNEL_TRAP
+  addi sp, sp, -(OFFSET_SIZE)
+
+  /* 按 SAVE_CONTEXT/RESTORE_CONTEXT 的 layout 保存寄存器 */
+  sd zero, OFFSET_REG_ZERO(sp)
+  sd ra, OFFSET_REG_RA(sp)
+  // sd sp, OFFSET_REG_SP(sp)
+  sd gp, OFFSET_REG_GP(sp)
+  sd tp, OFFSET_REG_TP(sp)
+  sd t0, OFFSET_REG_T0(sp)    /* 保留 slot */
+  sd t1, OFFSET_REG_T1(sp)
+  sd t2, OFFSET_REG_T2(sp)
+  sd s0, OFFSET_REG_S0(sp)
+  sd s1, OFFSET_REG_S1(sp)
+  sd a0, OFFSET_REG_A0(sp)
+  sd a1, OFFSET_REG_A1(sp)
+  sd a2, OFFSET_REG_A2(sp)
+  sd a3, OFFSET_REG_A3(sp)
+  sd a4, OFFSET_REG_A4(sp)
+  sd a5, OFFSET_REG_A5(sp)
+  sd a6, OFFSET_REG_A6(sp)
+  sd a7, OFFSET_REG_A7(sp)
+  sd s2, OFFSET_REG_S2(sp)
+  sd s3, OFFSET_REG_S3(sp)
+  sd s4, OFFSET_REG_S4(sp)
+  sd s5, OFFSET_REG_S5(sp)
+  sd s6, OFFSET_REG_S6(sp)
+  sd s7, OFFSET_REG_S7(sp)
+  sd s8, OFFSET_REG_S8(sp)
+  sd s9, OFFSET_REG_S9(sp)
+  sd s10, OFFSET_REG_S10(sp)
+  sd s11, OFFSET_REG_S11(sp)
+  sd t3, OFFSET_REG_T3(sp)
+  sd t4, OFFSET_REG_T4(sp)
+  sd t5, OFFSET_REG_T5(sp)
+  sd t6, OFFSET_REG_T6(sp)
+
+  li t0, SR_FS
+  csrc sstatus, t0
+  li t0, SR_SUM
+  csrs sstatus, t0
+  
+  /* 保存 sstatus, sepc, stval, scause */
+  csrr t0, sstatus
+  sd t0, OFFSET_REG_SSTATUS(sp)
+  csrr t0, sepc
+  sd t0, OFFSET_REG_SEPC(sp)
+  csrr t0, stval
+  sd t0, OFFSET_REG_STVAL(sp)
+  csrr t0, scause
+  sd t0, OFFSET_REG_SCAUSE(sp)
+
+  addi t0, sp, OFFSET_SIZE
+  sd t0, OFFSET_REG_SP(sp)
+
+  sd sp, PCB_KERNEL_SP(tp)
+.endm
+
+ENTRY(exception_handler_kernel_trap_entry)
+  SAVE_CONTEXT_KERNEL_TRAP
+
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
+
+  csrr a2, scause
+  csrr a1, stval
+  ld a0, PCB_KERNEL_SP(tp)
+  jal ra, interrupt_helper
+  la ra, ret_from_kernel_exception
+
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
+
+  jr ra
+  
+ENDPROC(exception_handler_kernel_trap_entry)
+
+ENTRY(ret_from_kernel_exception)
+  /* TODO: [p2-task3] restore context via provided macro and return to sepc */
+  /* HINT: remember to check your sp, does it point to the right address? */
+
+  li t0, SR_SUM
+  csrs CSR_SSTATUS, t0
+
+  RESTORE_CONTEXT
+
+  sret
+ENDPROC(ret_from_kernel_exception)
