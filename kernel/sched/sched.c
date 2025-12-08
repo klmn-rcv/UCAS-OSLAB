@@ -64,9 +64,10 @@ static void free_stack_page(pid_t pid) {
     // free user stack page
     for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
         int success = 0;
+        // printl("va2kva 1\n");
         uintptr_t user_stack_page_kva = va2kva(USER_STACK_ADDR - i * PAGE_SIZE, pcb[pid].pgdir, pid, &success);
         assert(success);
-        printl("freePage 1\n");
+        // printl("freePage 1\n");
         freePage(user_stack_page_kva);
     }
 }
@@ -103,7 +104,7 @@ static void free_proc_page_table(pid_t pid) {
                             for(int k = 0; k < 512; k++) {
                                 if(pt[k] != 0) {
                                     if((pt[k] & _PAGE_PRESENT) == 0) {
-                                        printl("swap_in 5\n");
+                                        // printl("swap_in 5\n");
                                         swap_in(&pt[k], pid, 0);
                                     }
 
@@ -112,7 +113,7 @@ static void free_proc_page_table(pid_t pid) {
                                         (j & (PPN_BITS)) << (NORMAL_PAGE_SHIFT + PPN_BITS) |
                                         (k & (PPN_BITS)) << NORMAL_PAGE_SHIFT;
                                         local_flush_tlb_page(va);
-                                        printl("freePage 2\n");
+                                        // printl("freePage 2\n");
                                         freePage(pa2kva(get_pa(pt[k])));
                                         pt[k] = 0;
                                     }
@@ -122,14 +123,14 @@ static void free_proc_page_table(pid_t pid) {
                                 }
                             }
                         }
-                        printl("freePage 3\n");
+                        // printl("freePage 3\n");
                         freePage(pa2kva(get_pa(pmd[j])));
                         // freeKernelPage(pa2kva(get_pa(pmd[j])), 1);
                         pmd[j] = 0;
                     }
                 }
             }
-            printl("freePage 4\n");
+            // printl("freePage 4\n");
             freePage(pa2kva(get_pa(pgd[i])));
             // freeKernelPage(pa2kva(get_pa(pgd[i])), 1);
             pgd[i] = 0;
@@ -138,6 +139,7 @@ static void free_proc_page_table(pid_t pid) {
 }
 
 static void bury(pid_t pid) {
+    printl("Enter bury...\n");
     pcb[pid].status = TASK_EXITED;
     pcb[pid].killed = 0;
     do_mutex_lock_free(pid);
@@ -145,6 +147,7 @@ static void bury(pid_t pid) {
     free_stack_page(pid);
     free_proc_page_table(pid);
     // LIST_DELETE(&pcb[pid].list);
+    printl("Exit bury...\n");
 }
 
 static list_node_t *find_next_node() {
@@ -163,6 +166,9 @@ static list_node_t *find_next_node() {
 
 void do_scheduler(void)
 {
+
+    printl("Enter do_scheduler, cpuid is %d\n", cpuid);
+
     // TODO: [p2-task3] Check sleep queue to wake up PCBs
     check_sleeping();
 
@@ -221,6 +227,7 @@ void do_scheduler(void)
             asm volatile("nop");
         }
 
+        printl("switch_to, cpuid is %d, from pid %d to pid %d\n", cpuid, prev_pcb->pid, next_pcb->pid);
         switch_to(prev_pcb, next_pcb);
     }
 }
@@ -293,6 +300,7 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
     // printl("After minus: pcb[pid].user_sp is: %lx\n", pcb[pid].user_sp);
 
     int success = 0;
+    printl("va2kva 2\n");
     uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, pid, &success);
     assert(success);
 
@@ -327,10 +335,9 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
 
 void do_exit(void) {
     printl("Enter do_exit, current_running->pid is %d\n", current_running->pid);
-    
     bury(current_running->pid);
-    do_scheduler();
     printl("Exit do_exit\n");
+    do_scheduler();
 }
 
 int do_kill(pid_t pid) {

@@ -202,6 +202,28 @@ int main(void)
                     continue;
                 }
             }
+        } else if(strcmp(argv[0], "free") == 0) {
+            if(argc >= 3) {
+                printf("free: too many arguments\n");
+                continue;
+            }
+            if(argc == 1) {
+                size_t free_mem = sys_free_mem();
+                printf("Free memory: %ld B\n", free_mem);
+            } else {    // argc == 2
+                if(strcmp(argv[1], "-h") == 0) {
+                    size_t free_mem = sys_free_mem();
+                    if(free_mem >= 1048576) {   // 1MB
+                        free_mem /= 1048576;
+                        printf("Free memory: %ld MB\n", free_mem);
+                    } else if (free_mem >= 1024) {  // 1KB
+                        free_mem /= 1024;
+                        printf("Free memory: %ld KB\n", free_mem);
+                    } else {
+                        printf("Free memory: %ld B\n", free_mem);
+                    }
+                }
+            }
         } else {
             printf("%s: command not found\n", argv[0]);
         }

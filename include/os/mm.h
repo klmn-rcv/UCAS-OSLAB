@@ -94,6 +94,7 @@ void swap_in(PTE *pte_ptr, pid_t pid, int unswapable);
 int alloc_sd_sector(void);
 void free_sd_sector(int begin);
 uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, pid_t pid, int *success);
+size_t get_free_memory(void);
 
 // TODO [P4-task4]: shm_page_get/dt */
 uintptr_t shm_page_get(int key);

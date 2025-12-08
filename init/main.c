@@ -72,8 +72,12 @@ static void init_task_info(/*uint16_t tasknum, uint32_t task_info_offset*/)
 
     unsigned num_sector = end_sector - begin_sector + 1;
     uintptr_t mem_address = TASK_MEM_BASE + TASK_SIZE * tasknum;
-    bios_sd_read(mem_address, num_sector, begin_sector);
-    memcpy((uint8_t *)mem_address, (uint8_t *)(mem_address + (task_info_offset % SECTOR_SIZE)), task_info_size);
+
+    assert(num_sector <= 16);
+
+    unsigned long buf_pa = kva2pa((uintptr_t)&buf);
+    bios_sd_read(buf_pa, num_sector, begin_sector);
+    memcpy((uint8_t *)mem_address, (uint8_t *)((unsigned long)&buf + (task_info_offset % SECTOR_SIZE)), task_info_size);
     memcpy((uint8_t *)tasks, (uint8_t *)mem_address, task_info_size);
 }
 
@@ -136,11 +140,13 @@ int create_task(char *taskname) {
         }
     }
     if(pid == 0) {
-        return 0;
+        assert(0);
     }
 
     ptr_t entry_point = map_and_load_task_img(taskname, pid, pcb[pid].pgdir, tasks, tasknum);
-    
+    if(entry_point == 0) { // task not found
+        return 0;
+    }
     
     // pcb[pid].kernel_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_KERNEL, PAGE_SIZE));
     // pcb[pid].user_sp = (reg_t)(pid * 2 * PAGE_SIZE + ROUND(FREEMEM_USER, PAGE_SIZE));
@@ -158,7 +164,7 @@ int create_task(char *taskname) {
         // printl("main.c: va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
         // PTE pte;
         int already_exist = 0;
-        printl("alloc_page_helper 1, va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
+        // printl("alloc_page_helper 1, va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
         alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pid, pcb[pid].pgdir, &already_exist);
     }
 
@@ -205,7 +211,7 @@ static void init_pcb(/*uint16_t tasknum*/)
         pcb[i].wakeup_time = 0;
         pcb[i].run_core_mask = 0;
         pcb[i].running_core_id = -1;
-        printl("Here!!!\n");
+        // printl("Here!!!\n");
         pcb[i].pgdir = allocPage(i, NULL, 1);
         pcb[i].killed = 0;
     }
@@ -275,6 +281,9 @@ static void init_syscall(void)
     syscall[SYSCALL_MBOX_CLOSE]        = (long (*)(long,long,long,long,long))do_mbox_close;
     syscall[SYSCALL_MBOX_SEND]         = (long (*)(long,long,long,long,long))do_mbox_send;
     syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
+
+    syscall[SYSCALL_FREE_MEM]          = (long (*)(long,long,long,long,long))get_free_memory;
+
     syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
     syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
     // syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
@@ -358,7 +367,7 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         // printl("Here 1, cpuid: %d\n", cpuid);
 
 
-        delete_temp_map();
+        // delete_temp_map();
 
 
         /*
@@ -393,7 +402,7 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
          */
         screen_move_cursor(0, get_current_cpu_id() + 1);
         printk("> [INIT] CPU #%u has entered kernel with VM!\n",
-        (unsigned int)get_current_cpu_id());
+            (unsigned int)get_current_cpu_id());
         // TODO: [p4-task1 cont.] remove the brake and continue to start user processes.
         // kernel_brake();
     }

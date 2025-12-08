@@ -114,23 +114,28 @@
   ld t6, OFFSET_REG_T6(sp)
 
   
-  ld t0, OFFSET_REG_SSTATUS(sp)
-  andi t0, t0, SR_SPP
-  bnez t0, 1f
+  // ld t0, OFFSET_REG_SSTATUS(sp)
+  // andi t0, t0, SR_SPP
+  // bnez t0, 1f
   // user mode
-  la t0, exception_handler_entry
-  csrw stvec, t0
-  j 2f
-1:  // kernel mode
-  la t0, exception_handler_kernel_trap_entry
-  csrw stvec, t0
-2:
+  // la t0, exception_handler_entry
+  // csrw stvec, t0
+  // j 2f
+// 1:  // kernel mode
+  // la t0, exception_handler_kernel_trap_entry
+  // csrw stvec, t0
+// 2:
+
 
   ld t0, OFFSET_REG_SSTATUS(sp)
   csrw sstatus, t0
   ld t0, OFFSET_REG_SEPC(sp)
-  //addi t0, t0, 4      // sepc + 4
   csrw sepc, t0
+
+  la t0, exception_handler_entry
+  csrw stvec, t0
+  li t0, 3
+  csrc stvec, t0
 
   ld t0, OFFSET_REG_T0(sp)  // load sp as the second last one
   ld sp, OFFSET_REG_SP(sp)  // load sp as the last one
@@ -231,6 +236,8 @@ ENTRY(exception_handler_entry)
   /* TODO: [p2-task3] save context via the provided macro */
   SAVE_CONTEXT
 
+  call lock_kernel
+
   /* 设置内核异常的stvec */
   la t0, exception_handler_kernel_trap_entry
   csrw stvec, t0
@@ -246,7 +253,6 @@ ENTRY(exception_handler_entry)
    * NOTE: don't forget to pass parameters for it.
    */
 
-  call lock_kernel
 
   li t0, SR_SUM
   csrs CSR_SSTATUS, t0
@@ -322,6 +328,62 @@ ENDPROC(exception_handler_entry)
   sd sp, PCB_KERNEL_SP(tp)
 .endm
 
+.macro RESTORE_CONTEXT_KERNEL_TRAP
+  /* TODO: Restore all general purpose registers and sepc, sstatus */
+  /* HINT: Pay attention to sp again! */
+  addi sp, sp, OFFSET_SIZE
+  sd sp, PCB_KERNEL_SP(tp)
+  addi sp, sp, -(OFFSET_SIZE)
+
+  ld zero, OFFSET_REG_ZERO(sp)
+  ld ra, OFFSET_REG_RA(sp)
+  // sp will be loaded at last
+  ld gp, OFFSET_REG_GP(sp)
+  ld tp, OFFSET_REG_TP(sp)
+  // t0 will be loaded as the second last
+  ld t1, OFFSET_REG_T1(sp)
+  ld t2, OFFSET_REG_T2(sp)
+  ld s0, OFFSET_REG_S0(sp)
+  ld s1, OFFSET_REG_S1(sp)
+  ld a0, OFFSET_REG_A0(sp)
+  ld a1, OFFSET_REG_A1(sp)
+  ld a2, OFFSET_REG_A2(sp)
+  ld a3, OFFSET_REG_A3(sp)
+  ld a4, OFFSET_REG_A4(sp)
+  ld a5, OFFSET_REG_A5(sp)
+  ld a6, OFFSET_REG_A6(sp)
+  ld a7, OFFSET_REG_A7(sp)
+  ld s2, OFFSET_REG_S2(sp)
+  ld s3, OFFSET_REG_S3(sp)
+  ld s4, OFFSET_REG_S4(sp)
+  ld s5, OFFSET_REG_S5(sp)
+  ld s6, OFFSET_REG_S6(sp)
+  ld s7, OFFSET_REG_S7(sp)
+  ld s8, OFFSET_REG_S8(sp)
+  ld s9, OFFSET_REG_S9(sp)
+  ld s10, OFFSET_REG_S10(sp)
+  ld s11, OFFSET_REG_S11(sp)
+  ld t3, OFFSET_REG_T3(sp)
+  ld t4, OFFSET_REG_T4(sp)
+  ld t5, OFFSET_REG_T5(sp)
+  ld t6, OFFSET_REG_T6(sp)
+
+  
+  ld t0, OFFSET_REG_SSTATUS(sp)
+  csrw sstatus, t0
+  ld t0, OFFSET_REG_SEPC(sp)
+  csrw sepc, t0
+
+  la t0, exception_handler_kernel_trap_entry
+  csrw stvec, t0
+  li t0, 3
+  csrc stvec, t0
+
+  ld t0, OFFSET_REG_T0(sp)  // load sp as the second last one
+  ld sp, OFFSET_REG_SP(sp)  // load sp as the last one
+
+.endm
+
 ENTRY(exception_handler_kernel_trap_entry)
   SAVE_CONTEXT_KERNEL_TRAP
 
@@ -348,7 +410,7 @@ ENTRY(ret_from_kernel_exception)
   li t0, SR_SUM
   csrs CSR_SSTATUS, t0
 
-  RESTORE_CONTEXT
+  RESTORE_CONTEXT_KERNEL_TRAP
 
   sret
 ENDPROC(ret_from_kernel_exception)

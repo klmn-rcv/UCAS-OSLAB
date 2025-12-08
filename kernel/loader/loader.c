@@ -5,39 +5,41 @@
 #include <printk.h>
 #include <os/mm.h>
 
-uint64_t load_task_img(char *taskname, task_info_t tasks[], uint16_t tasknum)
-{
-    /**
-     * TODO:
-     * 1. [p1-task3] load task from image via task id, and return its entrypoint
-     * 2. [p1-task4] load task via task name, thus the arg should be 'char *taskname'
-     */
+char buf[2 * PAGE_SIZE];
 
-    //// p1-task3:
-    // uint64_t entrypoint = (taskid - 1) * 0x10000 + 0x52000000;
-    // unsigned int block_id = 15 * taskid + 1;
-    // bios_sd_read(entrypoint, 15, block_id);
+// uint64_t load_task_img(char *taskname, task_info_t tasks[], uint16_t tasknum)
+// {
+//     /**
+//      * TODO:
+//      * 1. [p1-task3] load task from image via task id, and return its entrypoint
+//      * 2. [p1-task4] load task via task name, thus the arg should be 'char *taskname'
+//      */
 
-    // p1-task4:
-    task_info_t task_info;
-    int success = 0;
-    for(uint16_t i = 0; i < tasknum; i++) {
-        if(strcmp(tasks[i].taskname, taskname) == 0) {
-            task_info = tasks[i];
-            success = 1;
-        }
-    }
-    if(!success) return 0;
+//     //// p1-task3:
+//     // uint64_t entrypoint = (taskid - 1) * 0x10000 + 0x52000000;
+//     // unsigned int block_id = 15 * taskid + 1;
+//     // bios_sd_read(entrypoint, 15, block_id);
+
+//     // p1-task4:
+//     task_info_t task_info;
+//     int success = 0;
+//     for(uint16_t i = 0; i < tasknum; i++) {
+//         if(strcmp(tasks[i].taskname, taskname) == 0) {
+//             task_info = tasks[i];
+//             success = 1;
+//         }
+//     }
+//     if(!success) return 0;
     
-    uint64_t entrypoint = task_info.taskid * 0x10000 + 0x52000000;
-    unsigned begin_sector = NBYTES2SEC(task_info.offset) - 1;
-    unsigned end_sector = NBYTES2SEC(task_info.offset + task_info.filesz) - 1;
-    unsigned num_sector = end_sector - begin_sector + 1;
-    bios_sd_read_wrapper((unsigned)entrypoint, num_sector, begin_sector);
-    memcpy((uint8_t *)entrypoint, (uint8_t *)(entrypoint + (task_info.offset % SECTOR_SIZE)), task_info.filesz);
+//     uint64_t entrypoint = task_info.taskid * 0x10000 + 0x52000000;
+//     unsigned begin_sector = NBYTES2SEC(task_info.offset) - 1;
+//     unsigned end_sector = NBYTES2SEC(task_info.offset + task_info.filesz) - 1;
+//     unsigned num_sector = end_sector - begin_sector + 1;
+//     bios_sd_read_wrapper((unsigned)entrypoint, num_sector, begin_sector);
+//     memcpy((uint8_t *)entrypoint, (uint8_t *)(entrypoint + (task_info.offset % SECTOR_SIZE)), task_info.filesz);
 
-    return entrypoint;
-}
+//     return entrypoint;
+// }
 
 static void load_from_sd(uintptr_t dest_mem, uint32_t begin_off, uint32_t end_off) {
     unsigned long dest_mem_pa = kva2pa(dest_mem);
@@ -45,8 +47,13 @@ static void load_from_sd(uintptr_t dest_mem, uint32_t begin_off, uint32_t end_of
         unsigned begin_sector = NBYTES2SEC(begin_off) - 1;
         unsigned end_sector = NBYTES2SEC(end_off) - 1;
         unsigned num_sector = end_sector - begin_sector + 1;
-        bios_sd_read_wrapper(dest_mem_pa, num_sector, begin_sector);
-        memcpy((uint8_t *)dest_mem, (uint8_t *)(dest_mem + (begin_off % SECTOR_SIZE)), end_off - begin_off); 
+
+        assert(num_sector <= 16);
+
+        unsigned long buf_pa = kva2pa((uintptr_t)&buf);
+        // bios_sd_read_wrapper(dest_mem_pa, num_sector, begin_sector);
+        bios_sd_read_wrapper(buf_pa, num_sector, begin_sector);
+        memcpy((uint8_t *)dest_mem, (uint8_t *)((unsigned long)&buf + (begin_off % SECTOR_SIZE)), end_off - begin_off);
     }
 }
 
@@ -80,7 +87,7 @@ uint64_t map_and_load_task_img(char *taskname, pid_t pid, uintptr_t pgdir, task_
         // printl("loader.c: va: %lx\n", va);
         // PTE pte;
         int already_exist = 0;
-        printl("alloc_page_helper 3, va is: %lx\n", va);
+        // printl("alloc_page_helper 3, va is: %lx\n", va);
         uintptr_t load_dest = alloc_page_helper(va, pid, pgdir, &already_exist);
         uint64_t copy_size = (va_mem_end - va > PAGE_SIZE) ? PAGE_SIZE : (va_mem_end - va);
         uint64_t remain_filesz = (va_file_end - va > 0) ? (va_file_end - va) : 0;

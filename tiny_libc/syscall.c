@@ -296,7 +296,8 @@ int sys_taskset_p(uint32_t mask, pid_t pid)
 // }
 
 size_t sys_free_mem(void) {
-
+    size_t free_mem = invoke_syscall(SYSCALL_FREE_MEM, 0, 0, 0, 0, 0);
+    return free_mem;
 }
 
 /* TODO: [P4 task5] pipe*/
