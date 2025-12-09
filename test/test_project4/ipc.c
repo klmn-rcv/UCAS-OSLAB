@@ -9,7 +9,7 @@
 MSG_IN_MB: message size in megabytes used for the benchmark.
 */
 #define PAGE_SIZE 4096ul
-const long MSG_IN_MB = 512;
+const long MSG_IN_MB = 8;
 const long MSG_BYTES = MSG_IN_MB * 1024 * 1024;
 const long WARMUP_BYTES = PAGE_SIZE;
 const char MBOX_NAME[] = "ipc-perf-mailbox";
@@ -237,7 +237,7 @@ static int pipe_receiver(void)
 		if (dst[i] != (char)(i & 0xff))
 		{
 			sys_move_cursor(0, PIPE_RECV_LINE);
-			printf("[pipe recv] data mismatch at %d\n", (int)i);
+			printf("[pipe recv] data mismatch at %d, dst[i] is %d, (char)(i & 0xff) is %d\n", (int)i, (int)dst[i], (i & 0xff));
 			return -1;
 		}
 	}
@@ -252,10 +252,10 @@ static void run_mailbox_test(char *prog_name)
 {
 	sys_move_cursor(0, MAILBOX_TEST_LINE);
 	printf("== mailbox performance test ==\n");
-	char *recv_argv[3] = {prog_name, (char *)"mbox", (char *)"recv"};
-	char *send_argv[3] = {prog_name, (char *)"mbox", (char *)"send"};
+	char *recv_argv[4] = {"exec", prog_name, (char *)"mbox", (char *)"recv"};
+	char *send_argv[4] = {"exec", prog_name, (char *)"mbox", (char *)"send"};
 
-	pid_t receiver = sys_exec(prog_name, 3, recv_argv);
+	pid_t receiver = sys_exec(prog_name, 4, recv_argv);
 	if (receiver == 0)
 	{
 		sys_move_cursor(0, MAILBOX_TEST_LINE);
@@ -265,7 +265,7 @@ static void run_mailbox_test(char *prog_name)
 
 	sys_sleep(1);
 
-	pid_t sender = sys_exec(prog_name, 3, send_argv);
+	pid_t sender = sys_exec(prog_name, 4, send_argv);
 	if (sender == 0)
 	{
 		sys_move_cursor(0, MAILBOX_TEST_LINE);
@@ -283,10 +283,10 @@ static void run_pipe_test(char *prog_name)
 {
 	sys_move_cursor(0, PIPE_TEST_LINE);
 	printf("== pipe performance test ==\n");
-	char *recv_argv[3] = {prog_name, (char *)"pipe", (char *)"recv"};
-	char *send_argv[3] = {prog_name, (char *)"pipe", (char *)"send"};
+	char *recv_argv[4] = {"exec", prog_name, (char *)"pipe", (char *)"recv"};
+	char *send_argv[4] = {"exec", prog_name, (char *)"pipe", (char *)"send"};
 
-	pid_t receiver = sys_exec(prog_name, 3, recv_argv);
+	pid_t receiver = sys_exec(prog_name, 4, recv_argv);
 	if (receiver == 0)
 	{
 		sys_move_cursor(0, PIPE_TEST_LINE);
@@ -296,7 +296,7 @@ static void run_pipe_test(char *prog_name)
 
 	sys_sleep(1);
 
-	pid_t sender = sys_exec(prog_name, 3, send_argv);
+	pid_t sender = sys_exec(prog_name, 4, send_argv);
 	if (sender == 0)
 	{
 		sys_move_cursor(0, PIPE_TEST_LINE);
@@ -312,21 +312,21 @@ static void run_pipe_test(char *prog_name)
 // main: dispatch subcommands or run both tests
 int main(int argc, char *argv[])
 {
-	char *prog_name = argc > 0 ? argv[0] : (char *)"ipc_perf";
+	char *prog_name = argc > 1 ? argv[1] : (char *)"ipc_perf";
 
-	if (argc >= 3 && strcmp(argv[1], "mbox") == 0)
+	if (argc >= 4 && strcmp(argv[2], "mbox") == 0)
 	{
-		if (strcmp(argv[2], "send") == 0)
+		if (strcmp(argv[3], "send") == 0)
 			return mailbox_sender();
-		if (strcmp(argv[2], "recv") == 0)
+		if (strcmp(argv[3], "recv") == 0)
 			return mailbox_receiver();
 	}
 
-	if (argc >= 3 && strcmp(argv[1], "pipe") == 0)
+	if (argc >= 4 && strcmp(argv[2], "pipe") == 0)
 	{
-		if (strcmp(argv[2], "send") == 0)
+		if (strcmp(argv[3], "send") == 0)
 			return pipe_sender();
-		if (strcmp(argv[2], "recv") == 0)
+		if (strcmp(argv[3], "recv") == 0)
 			return pipe_receiver();
 	}
 

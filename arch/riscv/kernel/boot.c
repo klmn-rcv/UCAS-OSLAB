@@ -36,7 +36,7 @@ static void ARRTIBUTE_BOOTKERNEL map_page(uint64_t va, uint64_t pa, PTE *pgdir)
     // NORMAL_PAGE_SHIFT = 12（页内偏移位数）
     // PPN_BITS = 9（每个PPN字段9位）
     // 所以：va >> (12 + 9 + 9) = va >> 30，取[38:30]位（一级页表索引）
-    // 这里vpn2算出来是定值，十六进制0x101，十进制257（没考虑地址恒等映射，考虑的话总共就有两个取值）
+    // 这里vpn2算出来是定值，十六进制0x101，十进制257（没考虑地址恒等映射，考虑的话总共就有两个取值，257和1）
     uint64_t vpn2 =
         va >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
     
@@ -96,9 +96,9 @@ static void ARRTIBUTE_BOOTKERNEL setup_vm()
     for (uint64_t kva = 0xffffffc050000000lu;
          kva < 0xffffffc060000000lu; kva += 0x200000lu) {
 
-        if(kva == 0xffffffc052000000lu) {
-            asm volatile("nop");
-        }
+        // if(kva == 0xffffffc052000000lu) {
+        //     asm volatile("nop");
+        // }
 
         map_page(kva, kva2pa(kva), early_pgdir);
     }

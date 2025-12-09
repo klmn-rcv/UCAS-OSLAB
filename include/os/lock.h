@@ -30,6 +30,7 @@
 
 #include <os/list.h>
 #include <os/sched.h>
+#include <pgtable.h>
 
 #define LOCK_NUM 16
 
@@ -113,7 +114,7 @@ void do_semaphore_up(int sema_idx);
 void do_semaphore_down(int sema_idx);
 void do_semaphore_destroy(int sema_idx);
 
-#define MAX_MBOX_LENGTH (64)
+#define MAX_MBOX_LENGTH (4096)
 
 typedef struct mailbox
 {
@@ -135,6 +136,24 @@ int do_mbox_open(char *name);
 void do_mbox_close(int mbox_idx);
 int do_mbox_send(int mbox_idx, void * msg, int msg_length);
 int do_mbox_recv(int mbox_idx, void * msg, int msg_length);
+
+typedef struct pipe
+{
+    int in_use;
+    int fill;
+    char name[32];
+    PTE pte;   // pipe内只存一页的pte信息
+    int unswapable;  // 暂存这一页的unswapable信息
+    list_head give_wait_queue;
+    list_head take_wait_queue;
+} pipe_t;
+
+#define PIPE_NUM 16
+
+void init_pipe();
+int do_pipe_open(const char *name);
+long do_pipe_give_pages(int pipe_idx, void *src, size_t length);
+long do_pipe_take_pages(int pipe_idx, void *dst, size_t length);
 
 /************************************************************/
 

@@ -283,6 +283,9 @@ static void init_syscall(void)
     syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
 
     syscall[SYSCALL_FREE_MEM]          = (long (*)(long,long,long,long,long))get_free_memory;
+    syscall[SYSCALL_PIPE_OPEN]          = (long (*)(long,long,long,long,long))do_pipe_open;
+    syscall[SYSCALL_PIPE_GIVE]          = (long (*)(long,long,long,long,long))do_pipe_give_pages;
+    syscall[SYSCALL_PIPE_TAKE]          = (long (*)(long,long,long,long,long))do_pipe_take_pages;
 
     syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
     syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
@@ -305,6 +308,7 @@ static void kernel_brake(void)
 
 static void delete_temp_map(void) {
     PTE *pgdir = (PTE *)pa2kva(PGDIR_PA);
+    uint64_t vpn2_preserve = 0;
     for (uint64_t va = 0x50000000lu; va < 0x51000000lu; 
          va += 0x200000lu) {
         va &= VA_MASK;
@@ -314,7 +318,13 @@ static void delete_temp_map(void) {
                         (va >> (NORMAL_PAGE_SHIFT + PPN_BITS));
         PTE *pmd = (PTE *)pa2kva(get_pa(pgdir[vpn2]));
         pmd[vpn1] = 0;
+
+        if(vpn2 != vpn2_preserve) {
+            pgdir[vpn2_preserve] = 0;
+        }
+        vpn2_preserve = vpn2;
     }
+    pgdir[vpn2_preserve] = 0;
     local_flush_tlb_all();
 }
 
@@ -350,6 +360,7 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         init_barriers();
         init_conditions();
         init_mbox();
+        init_pipe();
         printk("> [INIT] Lock mechanism initialization succeeded.\n");
 
         // Init interrupt (^_^)
@@ -376,9 +387,9 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
          * NOTE: if you use SMP, then every CPU core should call
          *  `kernel_brake()` to stop executing!
          */
-        screen_move_cursor(0, get_current_cpu_id() + 1);
-        printk("> [INIT] CPU #%u has entered kernel with VM!\n",
-        (unsigned int)get_current_cpu_id());
+        // screen_move_cursor(0, get_current_cpu_id() + 1);
+        // printk("> [INIT] CPU #%u has entered kernel with VM!\n",
+        // (unsigned int)get_current_cpu_id());
         // TODO: [p4-task1 cont.] remove the brake and continue to start user processes.
 
         wakeup_other_hart();
@@ -400,9 +411,9 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
          * NOTE: if you use SMP, then every CPU core should call
          *  `kernel_brake()` to stop executing!
          */
-        screen_move_cursor(0, get_current_cpu_id() + 1);
-        printk("> [INIT] CPU #%u has entered kernel with VM!\n",
-            (unsigned int)get_current_cpu_id());
+        // screen_move_cursor(0, get_current_cpu_id() + 1);
+        // printk("> [INIT] CPU #%u has entered kernel with VM!\n",
+        //     (unsigned int)get_current_cpu_id());
         // TODO: [p4-task1 cont.] remove the brake and continue to start user processes.
         // kernel_brake();
     }

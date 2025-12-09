@@ -82,13 +82,13 @@ void interrupt_helper(regs_context_t *regs, uint64_t stval, uint64_t scause)
 
     // printl("Leaving interrupt_helper, pid is: %d, sepc is: %lx\n", current_running->pid, regs->sepc);
 
-    if(/*current_running->pid == 3 && */regs->sepc == 0x11784) {
-        asm volatile("nop");
-    }
+    // if(/*current_running->pid == 3 && */regs->sepc == 0x11784) {
+    //     asm volatile("nop");
+    // }
 
-    if(current_running->pid == 3) {
-        asm volatile("nop");
-    }
+    // if(current_running->pid == 3) {
+    //     asm volatile("nop");
+    // }
 }
 
 void handle_irq_timer(regs_context_t *regs, uint64_t stval, uint64_t scause)

@@ -282,6 +282,27 @@ int sys_taskset_p(uint32_t mask, pid_t pid)
     return success;
 }
 
+size_t sys_free_mem(void) {
+    size_t free_mem = invoke_syscall(SYSCALL_FREE_MEM, 0, 0, 0, 0, 0);
+    return free_mem;
+}
+
+/* TODO: [P4 task5] pipe*/
+int sys_pipe_open(const char *name) {
+    int pipe_idx = invoke_syscall(SYSCALL_PIPE_OPEN, (long)name, 0, 0, 0, 0);
+    return pipe_idx;
+}
+
+long sys_pipe_give_pages(int pipe_idx, void *src, size_t length) {
+    long send_bytes = invoke_syscall(SYSCALL_PIPE_GIVE, (long)pipe_idx, (long)src, (long)length, 0, 0);
+    return send_bytes;
+}
+
+long sys_pipe_take_pages(int pipe_idx, void *dst, size_t length) {
+    long recv_bytes = invoke_syscall(SYSCALL_PIPE_TAKE, (long)pipe_idx, (long)dst, (long)length, 0, 0);
+    return recv_bytes;
+}
+
 // tid_t sys_thread_create(void *func, void *arg) {
 //     tid_t tid = invoke_syscall(SYSCALL_THREAD_CREATE, (long)func, (long)arg, 0, 0, 0);
 //     return tid;
@@ -294,22 +315,4 @@ int sys_taskset_p(uint32_t mask, pid_t pid)
 // void sys_thread_exit() {
 //     invoke_syscall(SYSCALL_THREAD_EXIT, 0, 0, 0, 0, 0);
 // }
-
-size_t sys_free_mem(void) {
-    size_t free_mem = invoke_syscall(SYSCALL_FREE_MEM, 0, 0, 0, 0, 0);
-    return free_mem;
-}
-
-/* TODO: [P4 task5] pipe*/
-int sys_pipe_open(const char *name) {
-
-}
-
-long sys_pipe_give_pages(int pipe_idx, void *src, size_t length) {
-
-}
-
-long sys_pipe_take_pages(int pipe_idx, void *dst, size_t length) {
-    
-}
 /************************************************************/

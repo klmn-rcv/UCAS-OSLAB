@@ -38,7 +38,7 @@
 #define FREEMEM_KERNEL (INIT_KERNEL_STACK+2*PAGE_SIZE) // 前两页分别作为了主核和从核的kernel stack
 #define FREEMEM_KERNEL_END 0xffffffc060000000
 // #define PAGE_MAX_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
-#define PAGE_MAX_NUM 2000
+#define PAGE_MAX_NUM 500
 
 #define SD_SWAP_SECTOR_NUM 80000
 
@@ -62,6 +62,9 @@ typedef struct {
     int8_t alloc_record;    /* 页框分配记录，0 表示空闲，1 表示已分配 */
     int8_t unswapable;      /* 页框被用作内核栈或页表，不参与换入换出机制 */
 } pageframe_t;
+
+extern pageframe_t pageframes[PAGE_MAX_NUM];
+extern list_head pageframe_queue;
 
 int getPageId(uintptr_t kva);
 extern void init_pageframe_manager();
@@ -94,6 +97,7 @@ void swap_in(PTE *pte_ptr, pid_t pid, int unswapable);
 int alloc_sd_sector(void);
 void free_sd_sector(int begin);
 uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, pid_t pid, int *success);
+PTE *va2pte(uintptr_t va, uintptr_t pgdir);
 size_t get_free_memory(void);
 
 // TODO [P4-task4]: shm_page_get/dt */

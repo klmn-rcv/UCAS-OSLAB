@@ -2,6 +2,7 @@
 #include <os/sched.h>
 #include <os/list.h>
 #include <os/string.h>
+#include <os/mm.h>
 #include <atomic.h>
 #include <printk.h>
 #include <assert.h>
@@ -311,32 +312,40 @@ void do_mbox_close(int mbox_idx) {
 }
 
 int do_mbox_send(int mbox_idx, void * msg, int msg_length) {
+    printl("Enter do_mbox_send...\n");
     mailbox_t *mbox = &mboxes[mbox_idx];
 
     clear_wait_queue(&mbox->recv_wait_queue);
 
     // lock
     while(mbox->write_lock.lock.status == LOCKED) {
+        printl("do_mbox_send blocked due to write_lock\n");
         do_block(&current_running->list, &mbox->write_lock.block_queue);
     }
     mbox->write_lock.using_pid = current_running->pid;
     mbox->write_lock.lock.status = LOCKED;
 
+    clear_wait_queue(&mbox->recv_wait_queue);
+
     // clear_wait_queue(&mbox->recv_wait_queue);
     // clear_wait_queue(&mbox->send_wait_queue);
 
+    int sent = 0;
     char *msg_str = (char *)msg;
-    int block_cnt = 0;
+    // int block_cnt = 0;
 
     for(int i = 0; i < msg_length; i++) {
         mbox->tail %= (MAX_MBOX_LENGTH + 1);
         while((mbox->tail + 1) % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
-            block_cnt++;
+            // block_cnt++;
             LIST_APPEND(&current_running->list, &mbox->send_wait_queue);
             current_running->status = TASK_BLOCKED;
+            printl("do_mbox_send blocked due to fill box\n");
             do_scheduler();
         }
         mbox->message[mbox->tail++] = msg_str[i];
+        sent++;
+        clear_wait_queue(&mbox->recv_wait_queue);
     }
 
 
@@ -350,37 +359,46 @@ int do_mbox_send(int mbox_idx, void * msg, int msg_length) {
         do_unblock(first_blocked_node);
     }
 
-
-    return block_cnt;
+    printl("Exit do_mbox_send...\n");
+    // return block_cnt;
+    return sent;
 }
 
 int do_mbox_recv(int mbox_idx, void * msg, int msg_length) {
+    printl("Enter do_mbox_recv...\n");
     mailbox_t *mbox = &mboxes[mbox_idx];
 
     clear_wait_queue(&mbox->send_wait_queue);
 
     // lock
     while(mbox->read_lock.lock.status == LOCKED) {
+        printl("do_mbox_recv blocked due to read_lock\n");
         do_block(&current_running->list, &mbox->read_lock.block_queue);
     }
     mbox->read_lock.using_pid = current_running->pid;
     mbox->read_lock.lock.status = LOCKED;
 
+    clear_wait_queue(&mbox->send_wait_queue);
+
     // clear_wait_queue(&mbox->send_wait_queue);
     // clear_wait_queue(&mbox->recv_wait_queue);
 
+    int recv = 0;
     char *msg_str = (char *)msg;
-    int block_cnt = 0;
+    // int block_cnt = 0;
 
     for(int i = 0; i < msg_length; i++) {
         mbox->head %= (MAX_MBOX_LENGTH + 1);
         while(mbox->tail % (MAX_MBOX_LENGTH + 1) == mbox->head % (MAX_MBOX_LENGTH + 1)) {
-            block_cnt++;
+            // block_cnt++;
             LIST_APPEND(&current_running->list, &mbox->recv_wait_queue);
             current_running->status = TASK_BLOCKED;
+            printl("do_mbox_recv blocked due to empty box\n");
             do_scheduler();
         }
         msg_str[i] = mbox->message[mbox->head++];
+        recv++;
+        clear_wait_queue(&mbox->send_wait_queue);
     }
 
     mbox->head %= (MAX_MBOX_LENGTH + 1);
@@ -393,5 +411,168 @@ int do_mbox_recv(int mbox_idx, void * msg, int msg_length) {
         do_unblock(first_blocked_node);
     }
 
-    return block_cnt;
+    printl("Exit do_mbox_recv...\n");
+    // return block_cnt;
+    return recv;
+}
+
+
+
+
+
+pipe_t pipes[PIPE_NUM];
+
+void init_pipe() {
+    for(int i = 0; i < PIPE_NUM; i++) {
+        pipes[i].in_use = 0;
+        pipes[i].fill = 0;
+        memset(pipes[i].name, 0, 32);
+        pipes[i].pte = 0;
+        pipes[i].unswapable = -1;
+        LIST_INIT_HEAD(&pipes[i].give_wait_queue);
+        LIST_INIT_HEAD(&pipes[i].take_wait_queue);
+    }
+}
+
+int do_pipe_open(const char *name) {
+    for(int i = 0; i < PIPE_NUM; i++) {
+        if(strcmp(pipes[i].name, name) == 0) {
+            pipes[i].in_use = 1;
+            return i;
+        }
+    }
+
+    for(int i = 0; i < PIPE_NUM; i++) {
+        if(pipes[i].in_use == 0) {
+            strcpy(pipes[i].name, name);
+            pipes[i].in_use = 1;
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+long do_pipe_give_pages(int pipe_idx, void *src, size_t length) {
+    if (pipe_idx < 0 || pipe_idx >= PIPE_NUM || !pipes[pipe_idx].in_use) {
+        return -1;
+    }
+
+    printl("Enter giver...\n");
+
+    pipe_t *pipe = &pipes[pipe_idx];
+
+    clear_wait_queue(&pipe->take_wait_queue);
+
+    uint64_t pages = length / PAGE_SIZE;
+    uint64_t i;
+    for(i = 0; i < pages; i++) {
+        while(pipe->fill == 1) {
+            LIST_APPEND(&current_running->list, &pipe->give_wait_queue);
+            current_running->status = TASK_BLOCKED;
+            printl("giver blocked due to fill pipe\n");
+            do_scheduler();
+        }
+        uintptr_t va = (uintptr_t)src + i * PAGE_SIZE;
+        PTE *pte = va2pte(va, current_running->pgdir);
+        assert(pte);
+        assert(*pte);   // must not fail!!!
+
+        if(*pte & _PAGE_PRESENT) {  // 如果有物理页框
+            int id = (pa2kva(get_pa(*pte)) - FREEMEM_KERNEL) / PAGE_SIZE;
+            printl("give: id: %d, owner_pid: %d, pte_ptr: %lx, unswapable: %d\n", id, pageframes[id].owner_pid, pageframes[id].pte_ptr, pageframes[id].unswapable);
+            assert(pageframes[id].alloc_record == 1);
+            assert(pageframes[id].owner_pid == current_running->pid);
+            pageframes[id].owner_pid = -1;
+            assert(pipe->unswapable == -1);
+            pipe->unswapable = pageframes[id].unswapable;
+            pageframes[id].unswapable = 1;
+            pageframes[id].pte_ptr = NULL;
+            LIST_DELETE(&pageframes[id].list);
+        }
+
+        pipe->pte = *pte;
+        *pte = 0;
+        pipe->fill = 1;
+        local_flush_tlb_page(va);
+        clear_wait_queue(&pipe->take_wait_queue);
+    }
+
+    printl("Exit giver...\n");
+    return i * PAGE_SIZE;
+}
+
+long do_pipe_take_pages(int pipe_idx, void *dst, size_t length) {
+    if (pipe_idx < 0 || pipe_idx >= PIPE_NUM || !pipes[pipe_idx].in_use) {
+        return -1;
+    }
+
+    printl("Enter taker...\n");
+
+    pipe_t *pipe = &pipes[pipe_idx];
+
+    clear_wait_queue(&pipe->give_wait_queue);
+
+    uint64_t pages = length / PAGE_SIZE;
+    uint64_t i;
+    for(i = 0; i < pages; i++) {
+        while(pipe->fill == 0) {
+            LIST_APPEND(&current_running->list, &pipe->take_wait_queue);
+            current_running->status = TASK_BLOCKED;
+            printl("taker blocked due to empty pipe\n");
+            do_scheduler();
+        }
+        uintptr_t va = (uintptr_t)dst + i * PAGE_SIZE;
+        PTE *pte = va2pte(va, current_running->pgdir);
+
+        if(*pte != 0) {
+            if(*pte & _PAGE_PRESENT) {
+                int id = (pa2kva(get_pa(*pte)) - FREEMEM_KERNEL) / PAGE_SIZE;
+                printl("take: id: %d, owner_pid: %d, pte_ptr: %lx, unswapable: %d\n", id, pageframes[id].owner_pid, pageframes[id].pte_ptr, pageframes[id].unswapable);
+                assert(pageframes[id].alloc_record == 1);
+                assert(pageframes[id].owner_pid == current_running->pid);
+                pageframes[id].alloc_record = 0;
+                pageframes[id].owner_pid = -1;
+                pageframes[id].unswapable = 0;
+                // assert(pipe->unswapable != -1);
+                // assert(pageframes[id].unswapable == 1);
+                // pageframes[id].unswapable = pipe->unswapable;
+                // pipe->unswapable = -1;
+                // assert(pageframes[id].pte_ptr == NULL);
+                // pageframes[id].pte_ptr = pipe->pte;
+                LIST_DELETE(&pageframes[id].list);
+            }
+            else {
+                uint64_t begin_sector = (get_pa(*pte) >> NORMAL_PAGE_SHIFT) - 1;
+                free_sd_sector(begin_sector);
+            }
+        }
+
+        *pte = pipe->pte;
+        assert(pte);
+
+        if(*pte & _PAGE_PRESENT) {  // 如果有物理页框
+            int id = (pa2kva(get_pa(*pte)) - FREEMEM_KERNEL) / PAGE_SIZE;
+            assert(pageframes[id].alloc_record == 1);
+            assert(pageframes[id].owner_pid == -1);
+            assert(pipe->unswapable != -1);
+            assert(pageframes[id].unswapable == 1);
+            assert(pageframes[id].pte_ptr == NULL);
+            
+            pageframes[id].owner_pid = current_running->pid;
+            pageframes[id].unswapable = pipe->unswapable;
+            pipe->unswapable = -1;
+            pageframes[id].pte_ptr = pte;
+            if(pageframes[id].unswapable == 0) {
+                LIST_APPEND(&pageframes[id].list, &pageframe_queue);
+            }
+        }
+
+        pipe->fill = 0;
+        local_flush_tlb_page(va);
+        clear_wait_queue(&pipe->give_wait_queue);
+    }
+
+    printl("Exit taker...\n");
+    return i * PAGE_SIZE;
 }

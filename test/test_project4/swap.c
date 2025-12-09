@@ -6,7 +6,7 @@
 #include <time.h>
 
 #define PAGE_SIZE 0x1000      // 4KB page
-#define MAX_PAGES 2048        // Maximum pages to test
+#define MAX_PAGES 4096        // Maximum pages to test
 #define ROUNDS 2              // Test rounds
 
 // Memory page addresses

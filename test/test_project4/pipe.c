@@ -117,23 +117,23 @@ static int pipe_receiver(void)
 
 int main(int argc, char *argv[])
 {
-	if (argc > 1 && strcmp(argv[1], "send") == 0)
+	if (argc > 2 && strcmp(argv[2], "send") == 0)
 		return pipe_sender();
 
-	if (argc > 1 && strcmp(argv[1], "recv") == 0)
+	if (argc > 2 && strcmp(argv[2], "recv") == 0)
 		return pipe_receiver();
 
-	char *prog_name = argc > 0 ? argv[0] : (char *)"pipe";
+	char *prog_name = argc > 1 ? argv[1] : (char *)"pipe";
 
 	if (pipe_self_test() < 0)
 		printf("pipe: self test failed\n");
 
 	printf("pipe: starting cross-process test\n");
 
-	char *receiver_argv[2] = {prog_name, (char *)"recv"};
-	char *sender_argv[2] = {prog_name, (char *)"send"};
+	char *receiver_argv[3] = {"exec", prog_name, (char *)"recv"};
+	char *sender_argv[3] = {"exec", prog_name, (char *)"send"};
 
-	pid_t receiver = sys_exec(prog_name, 2, receiver_argv);
+	pid_t receiver = sys_exec(prog_name, 3, receiver_argv);
 	if (receiver == 0)
 	{
 		printf("pipe: failed to start receiver\n");
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
 
 	sys_sleep(1);
 
-	pid_t sender = sys_exec(prog_name, 2, sender_argv);
+	pid_t sender = sys_exec(prog_name, 3, sender_argv);
 	if (sender == 0)
 	{
 		printf("pipe: failed to start sender\n");
@@ -153,6 +153,7 @@ int main(int argc, char *argv[])
 	sys_waitpid(receiver);
 	sys_waitpid(sender);
 
+	sys_move_cursor(0, PIPE_RECV_LINE + 2);
 	printf("pipe: cross-process test finished\n");
 
 	return 0;

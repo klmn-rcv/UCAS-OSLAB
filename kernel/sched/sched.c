@@ -130,7 +130,7 @@ static void free_proc_page_table(pid_t pid) {
                     }
                 }
             }
-            // printl("freePage 4\n");
+            // printl("freePage 4, pid is %d\n", pid);
             freePage(pa2kva(get_pa(pgd[i])));
             // freeKernelPage(pa2kva(get_pa(pgd[i])), 1);
             pgd[i] = 0;
@@ -139,7 +139,7 @@ static void free_proc_page_table(pid_t pid) {
 }
 
 static void bury(pid_t pid) {
-    printl("Enter bury...\n");
+    // printl("Enter bury...\n");
     pcb[pid].status = TASK_EXITED;
     pcb[pid].killed = 0;
     do_mutex_lock_free(pid);
@@ -147,7 +147,7 @@ static void bury(pid_t pid) {
     free_stack_page(pid);
     free_proc_page_table(pid);
     // LIST_DELETE(&pcb[pid].list);
-    printl("Exit bury...\n");
+    // printl("Exit bury...\n");
 }
 
 static list_node_t *find_next_node() {
@@ -155,10 +155,25 @@ static list_node_t *find_next_node() {
     for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
         next_node = node->next;
         pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+        if(node_pcb->pid == 0 || node_pcb->pid == 1) {
+            continue;
+        }
         uint32_t cpu_mask = (1U << cpuid);
         if(node_pcb->run_core_mask & cpu_mask) {
             result_node = node;
             break;
+        }
+    }
+
+    if (result_node == NULL) {
+        for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
+            next_node = node->next;
+            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+            uint32_t cpu_mask = (1U << cpuid);
+            if(node_pcb->run_core_mask & cpu_mask) {
+                result_node = node;
+                break;
+            }
         }
     }
     return result_node;
@@ -166,9 +181,6 @@ static list_node_t *find_next_node() {
 
 void do_scheduler(void)
 {
-
-    printl("Enter do_scheduler, cpuid is %d\n", cpuid);
-
     // TODO: [p2-task3] Check sleep queue to wake up PCBs
     check_sleeping();
 
@@ -179,11 +191,12 @@ void do_scheduler(void)
     // TODO: [p2-task1] Modify the current_running pointer.
 
     if (current_running->killed) {
-        printl("bury 2\n");
+        // printl("bury 2\n");
         bury(current_running->pid);
     }
     else if (current_running->status == TASK_RUNNING) {
         current_running->status = TASK_READY;
+        current_running->running_core_id = -1;
         LIST_APPEND(&current_running->list, &ready_queue);
     }
 
@@ -207,7 +220,7 @@ void do_scheduler(void)
             LIST_DELETE(next_node);
 
             if(next_pcb->killed) {
-                printl("bury 3\n");
+                // printl("bury 3\n");
                 bury(next_pcb->pid);
                 need_another_search = 1;
             }
@@ -217,17 +230,19 @@ void do_scheduler(void)
         next_pcb->running_core_id = cpuid;
         current_running = next_pcb;
 
+        // printl("do_scheduler: cpuid: %d, from %d -> %d; %d; %d\n", cpuid, prev_pcb->pid, next_pcb->pid, pcb[2].status, pcb[2].running_core_id);
+
         // TODO: [p2-task1] switch_to current_running
 
         set_satp(SATP_MODE_SV39, current_running->pid, kva2pa(current_running->pgdir) >> NORMAL_PAGE_SHIFT);
         local_flush_tlb_all();
         local_flush_icache_all();
 
-        if(current_running->pid == 3) {
-            asm volatile("nop");
-        }
+        // if(current_running->pid == 3) {
+        //     asm volatile("nop");
+        // }
 
-        printl("switch_to, cpuid is %d, from pid %d to pid %d\n", cpuid, prev_pcb->pid, next_pcb->pid);
+        // printl("switch_to, cpuid is %d, from pid %d to pid %d\n", cpuid, prev_pcb->pid, next_pcb->pid);
         switch_to(prev_pcb, next_pcb);
     }
 }
@@ -300,7 +315,7 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
     // printl("After minus: pcb[pid].user_sp is: %lx\n", pcb[pid].user_sp);
 
     int success = 0;
-    printl("va2kva 2\n");
+    // printl("va2kva 2\n");
     uintptr_t user_sp_kva = va2kva(pcb[pid].user_sp, pcb[pid].pgdir, pid, &success);
     assert(success);
 
@@ -378,9 +393,9 @@ int do_waitpid(pid_t pid) {
 void do_process_show(void) {
     char *status[3] = {"BLOCKED", "RUNNING", "READY"};
     printk("[Process Table]\n");
-    for(int i = 2; i < NUM_MAX_TASK; i++) {
+    for(int i = 0; i < NUM_MAX_TASK; i++) {
         if(pcb[i].status != TASK_EXITED) {
-            printk("[%d] PID : %d  STATUS : %s mask: %x", i - 2, pcb[i].pid, status[pcb[i].status], pcb[i].run_core_mask);
+            printk("[%d] PID : %d  STATUS : %s mask: %x", i, pcb[i].pid, status[pcb[i].status], pcb[i].run_core_mask);
             if(pcb[i].status == TASK_RUNNING) {
                 printk(" Running on core %d\n", pcb[i].running_core_id);
             } else {
