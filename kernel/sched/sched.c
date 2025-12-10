@@ -238,10 +238,6 @@ void do_scheduler(void)
         local_flush_tlb_all();
         local_flush_icache_all();
 
-        // if(current_running->pid == 3) {
-        //     asm volatile("nop");
-        // }
-
         // printl("switch_to, cpuid is %d, from pid %d to pid %d\n", cpuid, prev_pcb->pid, next_pcb->pid);
         switch_to(prev_pcb, next_pcb);
     }
@@ -349,9 +345,9 @@ pid_t do_exec(char *name, int argc, char *argv[]) {
 }
 
 void do_exit(void) {
-    printl("Enter do_exit, current_running->pid is %d\n", current_running->pid);
+    // printl("Enter do_exit, current_running->pid is %d\n", current_running->pid);
     bury(current_running->pid);
-    printl("Exit do_exit\n");
+    // printl("Exit do_exit\n");
     do_scheduler();
 }
 
@@ -359,18 +355,6 @@ int do_kill(pid_t pid) {
     if(pid <= 0 || pid >= NUM_MAX_TASK || pcb[pid].status == TASK_EXITED) {
         return 0;
     }
-
-    // task_status_t old_status = pcb[pid].status;
-
-    // // pcb[pid].status = TASK_EXITED;
-
-    // else {
-    //     do_mutex_lock_free(pid);
-    //     clear_wait_list(pid);
-    //     LIST_DELETE(&pcb[pid].list);
-    //     free_user_stack_page(pid);
-    //     free_proc_page_table(pid);
-    // }
 
     pcb[pid].killed = 1;
     

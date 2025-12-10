@@ -94,14 +94,6 @@ void enqueue_pageframe(pageframe_t *pageframe) {
 }
 
 pageframe_t *dequeue_pageframe() {
-    // static int dequeue_count = 0;
-    // // printl("Enter dequeue_pageframe...\n");
-    // dequeue_count++;
-
-    // if(dequeue_count == 184) {
-    //     asm volatile("nop");
-    // }
-
     if (!LIST_EMPTY(&pageframe_queue)) {
 
         list_node_t *node, *next_node;
@@ -120,25 +112,17 @@ pageframe_t *dequeue_pageframe() {
     
                 if((pcb[pageframe_now->owner_pid].status != TASK_RUNNING) || (pcb[pageframe_now->owner_pid].running_core_id == cpuid)) {
                     pageframe = pageframe_now;
-
-                    // if(pageframe->id * PAGE_SIZE + FREEMEM_KERNEL == 0xffffffc05228c000lu) {
-                    //     asm volatile("nop");
-                    // }
-
                     break;
                 }
             }
 
             if(pageframe != NULL)
                 break;
-            // else {
-            //     asm volatile("nop");
-            // }
 
-            loop_count++;
-            if(loop_count % 1000 == 0) {
-                printl("%ld\n", loop_count);
-            }
+            // loop_count++;
+            // if(loop_count % 1000 == 0) {
+            //     printl("%ld\n", loop_count);
+            // }
 
             unlock_kernel();
             lock_kernel();
@@ -216,10 +200,6 @@ ptr_t allocKernelPage(int numPage, pid_t pid) {
 
                 // printl("Exit allocKernelPage 1, page_addr is %lx\n", page_addr);
 
-                // if(page_addr == 0xffffffc05201f000lu) {
-                //     asm volatile("nop");
-                // }
-
                 return page_addr;
             }
         }
@@ -258,11 +238,6 @@ ptr_t allocKernelPage(int numPage, pid_t pid) {
                 memset((uint8_t *)page_addr, 0, numPage * PAGE_SIZE);
 
                 // printl("Exit allocKernelPage 2, page_addr is %lx\n", page_addr);
-
-                // if(page_addr == 0xffffffc05201f000lu) {
-                //     asm volatile("nop");
-                // }
-
                 return page_addr;
             }
         }
@@ -295,10 +270,6 @@ ptr_t allocPage(pid_t pid, PTE *pte_ptr, int unswapable) {
     // printl("Enter allocPage...\n");
     for (int i = 0; i < PAGE_MAX_NUM; i++) {
         if(pageframes[i].alloc_record == 0) {
-
-            // if(pageframes[i].unswapable == 1) {
-            //     asm volatile("nop");
-            // }
             assert(pageframes[i].unswapable == 0);
 
             if(!unswapable) {
@@ -352,12 +323,6 @@ ptr_t allocPage(pid_t pid, PTE *pte_ptr, int unswapable) {
     // if(pte_ptr == NULL) {
     //     printl("Here 3\n");
     //     pageframe->pte_ptr = kva2pte(page_addr);
-    // }
-    
-    // static int alloc_count = 0;
-    // alloc_count++;
-    // if(alloc_count == 5358) {
-    //     asm volatile("nop");
     // }
     
     // printl("Exit allocPage 2, page_addr is %lx, pageframe->pte_ptr is %lx\n", page_addr, pageframe->pte_ptr);
@@ -416,14 +381,6 @@ void freePage(ptr_t baseAddr)
 
 void swap_out(pageframe_t *pageframe)
 {
-    // static int count_swap_out = 0;
-    // count_swap_out++;
-    // printl("Enter swap_out...\n");
-
-    // if(count_swap_out == 31) {
-    //     asm volatile("nop");
-    // }
-
     assert(pageframe);
     assert(pageframe->alloc_record == 1);
     assert(pageframe->owner_pid >= 0 && pageframe->owner_pid < 16);
@@ -471,14 +428,6 @@ void swap_out(pageframe_t *pageframe)
 
 void swap_in(PTE *pte_ptr, pid_t pid, int unswapable)
 {
-    // static int count_swap_in = 0;
-    // count_swap_in++;
-    // printl("Enter swap_in...\n");
-
-    // if(count_swap_in == 4) {
-    //     asm volatile("nop");
-    // }
-
     assert(*pte_ptr);
     assert((*pte_ptr & _PAGE_PRESENT) == 0);
 
@@ -488,66 +437,19 @@ void swap_in(PTE *pte_ptr, pid_t pid, int unswapable)
 
     pageframe_t *pageframe = &pageframes[id];
 
-    // for (int i = 0; i < PAGE_MAX_NUM; i++) {
-    //     if(pageframes[i].alloc_record == 0) {
-
-    //         // if(pageframes[i].unswapable == 1) {
-    //         //     asm volatile("nop");
-    //         // }
-    //         assert(pageframes[i].unswapable == 0);
-
-    //         if(!unswapable) {
-    //             enqueue_pageframe(&pageframes[i]);
-    //         }
-
-
-    //     }
-    // }
-
-    // pageframe_t *pageframe = dequeue_pageframe();
-
     // printl()
     assert(pageframe);
     assert(pageframe->alloc_record == 1);
-    
-    // if(pageframe->owner_pid != -1) {
-    //     printl("owner_pid: %d, alloc_record: %d, unswapable: %d\n", pageframe->owner_pid, pageframe->alloc_record, pageframe->unswapable);
-    // }
-    
     assert(pageframe->owner_pid == pid);
     assert(pageframe->unswapable == unswapable);
-
-
-    // if(!unswapable) {
-    //     enqueue_pageframe(pageframe);
-    // }
-
-    // pageframe->alloc_record = 1;
-    // pageframe->pte_ptr = pte_ptr;
-    // pageframe->unswapable = unswapable;
-    // pageframe->owner_pid = pid;
-    // pageframe->owner_pid = 
 
     uint64_t begin_sector = (get_pa(*(pte_ptr)) >> NORMAL_PAGE_SHIFT) - 1;
 
     ptr_t page_pa = kva2pa(page_kva);
 
-    // if(begin_sector >  1000000) {
-    //     printl("PANIC: begin_sector is %lu\n", begin_sector);
-    //     // assert(0);
-    // }
-
-    // printl("mm.c: page_pa: %lx, begin_sector: %lu\n", page_pa, begin_sector);
-
     bios_sd_read(page_pa, PAGE_SIZE / SECTOR_SIZE, begin_sector);
 
     free_sd_sector(begin_sector);
-
-    // printl("swap_in: pte_ptr is %lx, page_pa is %lx\n", pte_ptr, page_pa);
-
-    // if(pte_ptr == 0xffffffc052031000) {
-    //     printl("DEBUG 2!!! write in pfn: %lx\n", page_pa >> NORMAL_PAGE_SHIFT);
-    // }
 
     set_pfn(pte_ptr, page_pa >> NORMAL_PAGE_SHIFT);
     set_attribute(pte_ptr, _PAGE_PRESENT);
@@ -607,13 +509,6 @@ uintptr_t va2kva(uintptr_t va, uintptr_t pgdir, pid_t pid, int *success) {
         return 0;
     }
     else if((pt[vpn0] & _PAGE_PRESENT) == 0) {
-        // printl("PANIC: pt[vpn0] is %lx\n", pt[vpn0]);
-        // uint64_t begin_sector = ((get_pa(pt[vpn0])) >> NORMAL_PAGE_SHIFT) - 1;
-        // free_sd_sector(begin_sector);
-        // *success = 0;
-        // assert(0);
-        // return 0;
-        // printl("swap_in 1\n");
         swap_in(&pt[vpn0], pid, 0);
     }
     if(isLeaf(pt[vpn0])) {
@@ -776,11 +671,6 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
     if(pt[vpn0] == 0) {
 
         // printl("Here 4!!! va is %lx\n", va);
-
-        if(va == 0x15000) {
-            asm volatile("nop");
-        }
-
         uint64_t pfn = kva2pa(allocPage(pid, &pt[vpn0], 0)) >> NORMAL_PAGE_SHIFT;
 
         // if(&pt[vpn0] == 0xffffffc052031000) {

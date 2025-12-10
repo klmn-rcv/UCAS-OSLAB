@@ -38,17 +38,12 @@
 #define FREEMEM_KERNEL (INIT_KERNEL_STACK+2*PAGE_SIZE) // 前两页分别作为了主核和从核的kernel stack
 #define FREEMEM_KERNEL_END 0xffffffc060000000
 // #define PAGE_MAX_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
-#define PAGE_MAX_NUM 500
+#define PAGE_MAX_NUM 250
 
 #define SD_SWAP_SECTOR_NUM 80000
 
 #define KERNEL_STACK_PAGE_NUM 2
 #define USER_STACK_PAGE_NUM 20
-
-////////////////////////////////////////////////////////////////
-// #define INIT_USER_STACK 0x52500000      // 要改！！！！！
-// #define FREEMEM_USER INIT_USER_STACK    // 要改！！！！！
-////////////////////////////////////////////////////////////////
 
 /* Rounding; only works for n = power of two */
 #define ROUND(a, n)     (((((uint64_t)(a))+(n)-1)) & ~((n)-1))
