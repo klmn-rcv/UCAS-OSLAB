@@ -47,4 +47,7 @@
 // #define SYSCALL_THREAD_EXIT 72
 
 
+#define SYSCALL_NET_SEND 63
+#define SYSCALL_NET_RECV 64
+
 #endif

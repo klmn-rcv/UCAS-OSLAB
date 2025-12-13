@@ -5,3 +5,4 @@ build
 *.gdb
 *.exp
 *.sh
+fpga.log
