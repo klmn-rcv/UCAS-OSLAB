@@ -37,8 +37,8 @@
 #define INIT_KERNEL_STACK 0xffffffc052000000
 #define FREEMEM_KERNEL (INIT_KERNEL_STACK+2*PAGE_SIZE) // 前两页分别作为了主核和从核的kernel stack
 #define FREEMEM_KERNEL_END 0xffffffc060000000
-// #define PAGE_MAX_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
-#define PAGE_MAX_NUM 250
+#define PAGE_MAX_NUM ((FREEMEM_KERNEL_END - FREEMEM_KERNEL) / PAGE_SIZE)
+// #define PAGE_MAX_NUM 250
 
 #define SD_SWAP_SECTOR_NUM 80000
 
@@ -86,7 +86,8 @@ extern ptr_t allocLargePage(int numPage);
 // TODO [P4-task1] */
 extern void* kmalloc(size_t size);
 extern void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir);
-extern uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte, */int *already_exist);
+extern uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir);
+void create_mapping(uintptr_t va, uintptr_t pa, uintptr_t pgdir, int kernel);
 void swap_out(pageframe_t *pageframe);
 void swap_in(PTE *pte_ptr, pid_t pid, int unswapable);
 int alloc_sd_sector(void);

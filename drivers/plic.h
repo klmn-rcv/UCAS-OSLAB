@@ -4,6 +4,8 @@
 #include <type.h>
 #include <os/sched.h>
 
+typedef int bool;
+
 extern struct plic_handler {
 	bool		present;
 	void		*hart_base;

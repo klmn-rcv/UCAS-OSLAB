@@ -86,9 +86,8 @@ uint64_t map_and_load_task_img(char *taskname, pid_t pid, uintptr_t pgdir, task_
     for(; va < va_mem_end; va += PAGE_SIZE) {
         // printl("loader.c: va: %lx\n", va);
         // PTE pte;
-        int already_exist = 0;
         // printl("alloc_page_helper 3, va is: %lx\n", va);
-        uintptr_t load_dest = alloc_page_helper(va, pid, pgdir, &already_exist);
+        uintptr_t load_dest = alloc_page_helper(va, pid, pgdir);
         uint64_t copy_size = (va_mem_end - va > PAGE_SIZE) ? PAGE_SIZE : (va_mem_end - va);
         uint64_t remain_filesz = (va_file_end - va > 0) ? (va_file_end - va) : 0;
         

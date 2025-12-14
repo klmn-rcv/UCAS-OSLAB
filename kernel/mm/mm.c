@@ -584,7 +584,7 @@ void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir)
 /* allocate physical page for `va`, mapping it into `pgdir`,
    return the kernel virtual address for the page
    */
-uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte, */int *already_exist)
+uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir)
 {
 
     // printl("pgdir: %lx\n", pgdir);
@@ -619,7 +619,6 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
         set_pfn(&pgd[vpn2], pfn);
         set_attribute(&pgd[vpn2], _PAGE_PRESENT);
         clear_pgdir(pa2kva(get_pa(pgd[vpn2])));
-        *already_exist = 0;
     }
     else if((pgd[vpn2] & _PAGE_PRESENT) == 0) {
         // swap in
@@ -647,7 +646,6 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
         set_pfn(&pmd[vpn1], pfn);
         set_attribute(&pmd[vpn1], _PAGE_PRESENT);
         clear_pgdir(pa2kva(get_pa(pmd[vpn1])));
-        *already_exist = 0;
     }
     else if((pmd[vpn1] & _PAGE_PRESENT) == 0) {
         // swap in
@@ -681,7 +679,6 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
         set_attribute(
             &pt[vpn0], _PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE |
                             _PAGE_EXEC | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY);
-        *already_exist = 0;
     }
     else if((pt[vpn0] & _PAGE_PRESENT) == 0) {
         // swap in
@@ -695,14 +692,68 @@ uintptr_t alloc_page_helper(uintptr_t va, pid_t pid, uintptr_t pgdir, /*PTE *pte
 
         swap_in(&pt[vpn0], pid, 0);
         // pageframe->owner_pid = pid;
-        *already_exist = 1;
-    }
-    else {
-        *already_exist = 1;
     }
 
     // *pte = pt[vpn0];
     return pa2kva(get_pa(pt[vpn0]));
+}
+
+void create_mapping(uintptr_t va, uintptr_t pa, uintptr_t pgdir, int kernel) {
+    PTE *pgd = (PTE *)pgdir;
+    va &= VA_MASK;
+    uint64_t vpn2 =
+        va >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
+    uint64_t vpn1 = (vpn2 << PPN_BITS) ^
+                    (va >> (NORMAL_PAGE_SHIFT + PPN_BITS));
+    uint64_t vpn0 = (vpn2 << (PPN_BITS + PPN_BITS)) ^
+                    (vpn1 << PPN_BITS) ^
+                    (va >> NORMAL_PAGE_SHIFT);
+
+    if (pgd[vpn2] == 0) {
+
+        // printl("va is: %lx\n", va);
+
+        uint64_t pfn = kva2pa(allocPage(current_running->pid, &pgd[vpn2], 1)) >> NORMAL_PAGE_SHIFT;
+        set_pfn(&pgd[vpn2], pfn);
+        set_attribute(&pgd[vpn2], _PAGE_PRESENT);
+        clear_pgdir(pa2kva(get_pa(pgd[vpn2])));
+    }
+    else if((pgd[vpn2] & _PAGE_PRESENT) == 0){
+        // printl("va is: %lx, pgd[vpn2]: %lx\n", va, pgd[vpn2]);
+        assert(0);
+    }
+
+    PTE *pmd = (PTE *)pa2kva(get_pa(pgd[vpn2]));
+    if (pmd[vpn1] == 0) {
+        uint64_t pfn = kva2pa(allocPage(current_running->pid, &pmd[vpn1], 1)) >> NORMAL_PAGE_SHIFT;
+        set_pfn(&pmd[vpn1], pfn);
+        set_attribute(&pmd[vpn1], _PAGE_PRESENT);
+        clear_pgdir(pa2kva(get_pa(pmd[vpn1])));
+    }
+    else if((pmd[vpn1] & _PAGE_PRESENT) == 0) {
+        assert(0);
+    }
+
+    PTE *pt = (PTE *)pa2kva(get_pa(pmd[vpn1]));
+    
+    if(pt[vpn0] == 0) {
+        uint64_t pfn = pa >> NORMAL_PAGE_SHIFT;
+
+        set_pfn(&pt[vpn0], pfn);
+        if(kernel) {
+            set_attribute(
+                &pt[vpn0], _PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE |
+                                _PAGE_EXEC | _PAGE_ACCESSED | _PAGE_DIRTY);
+        }
+        else {
+            set_attribute(
+                &pt[vpn0], _PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE |
+                                _PAGE_EXEC | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY);
+        }
+    }
+    else if((pt[vpn0] & _PAGE_PRESENT) == 0) {
+        assert(0);
+    }
 }
 
 size_t get_free_memory(void) {

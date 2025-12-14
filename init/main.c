@@ -12,6 +12,7 @@
 #include <os/time.h>
 #include <os/smp.h>
 #include <os/ioremap.h>
+#include <os/net.h>
 #include <sys/syscall.h>
 #include <screen.h>
 #include <e1000.h>
@@ -165,9 +166,8 @@ int create_task(char *taskname) {
     for(int i = 1; i <= USER_STACK_PAGE_NUM; i++) {
         // printl("main.c: va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
         // PTE pte;
-        int already_exist = 0;
         // printl("alloc_page_helper 1, va is: %lx\n", USER_STACK_ADDR - i * PAGE_SIZE);
-        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pid, pcb[pid].pgdir, &already_exist);
+        alloc_page_helper(USER_STACK_ADDR - i * PAGE_SIZE, pid, pcb[pid].pgdir);
     }
 
     LIST_INIT_HEAD(&pcb[pid].wait_list);
@@ -291,6 +291,10 @@ static void init_syscall(void)
 
     syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
     syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
+
+    syscall[SYSCALL_NET_SEND]          = (long (*)(long,long,long,long,long))do_net_send;
+    syscall[SYSCALL_NET_RECV]          = (long (*)(long,long,long,long,long))do_net_recv;
+
     // syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
     // syscall[SYSCALL_THREAD_JOIN]       = (long (*)(long,long,long,long,long))do_thread_join;
     // syscall[SYSCALL_THREAD_EXIT]       = (long (*)(long,long,long,long,long))do_thread_exit;
@@ -330,9 +334,9 @@ static void delete_temp_map(void) {
     local_flush_tlb_all();
 }
 
-static void e1000_init() {
+static void ioremap_init() {
     time_base = bios_read_fdt(TIMEBASE);
-    e1000 = (volatile uint8_t *)bios_read_fdt(EHTERNET_ADDR);
+    e1000 = (volatile uint8_t *)bios_read_fdt(ETHERNET_ADDR); // 从设备树中获取MAC内部寄存器的起始地址
     uint64_t plic_addr = bios_read_fdt(PLIC_ADDR);
     uint32_t nr_irqs = (uint32_t)bios_read_fdt(NR_IRQS);
     printk("> [INIT] e1000: %lx, plic_addr: %lx, nr_irqs: %lx.\n", e1000, plic_addr, nr_irqs);
@@ -385,6 +389,8 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         // TODO: [p5-task4] Init plic
         // plic_init(plic_addr, nr_irqs);
         // printk("> [INIT] PLIC initialized successfully. addr = 0x%lx, nr_irqs=0x%x\n", plic_addr, nr_irqs);
+
+        ioremap_init();
 
         // Init network device
         e1000_init();

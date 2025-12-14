@@ -55,12 +55,50 @@ static void e1000_reset(void)
 static void e1000_configure_tx(void)
 {
     /* TODO: [p5-task1] Initialize tx descriptors */
+    // 清空发送描述符
+    memset(tx_desc_array, 0, sizeof(tx_desc_array));
+    for (int i = 0; i < TXDESCS; i++) {
+        // 设置缓冲区物理地址（注意：DMA需要物理地址）
+        // 这里先设置虚拟地址，稍后需要转换为物理地址
+        assert(&tx_pkt_buffer[i][0] >= 0xffffffc050000000lu && &tx_pkt_buffer[i][0] <= 0xffffffc060000000lu);
+        tx_desc_array[i].addr = (uint64_t)kva2pa((uintptr_t)&tx_pkt_buffer[i][0]);
+        
+        // 其他字段初始化为0，在发送时设置
+        tx_desc_array[i].length = 0;
+        tx_desc_array[i].cso = 0;
+        tx_desc_array[i].cmd = E1000_TXD_CMD_RS;
+        tx_desc_array[i].status = E1000_TXD_STAT_DD;
+        tx_desc_array[i].css = 0;
+        tx_desc_array[i].special = 0;
+    }
 
     /* TODO: [p5-task1] Set up the Tx descriptor base address and length */
+    // 获取描述符数组的物理地址
+    uint64_t tx_desc_phys = kva2pa((uintptr_t)tx_desc_array);
+    // 设置低32位地址
+    e1000_write_reg(e1000, E1000_TDBAL, (uint32_t)(tx_desc_phys & 0xFFFFFFFF));
+    // 设置高32位地址（对于64位系统）
+    e1000_write_reg(e1000, E1000_TDBAH, (uint32_t)((tx_desc_phys >> 32) & 0xFFFFFFFF));
+
+    uint32_t tx_desc_len = TXDESCS * sizeof(struct e1000_tx_desc);
+    e1000_write_reg(e1000, E1000_TDLEN, tx_desc_len);
 
 	/* TODO: [p5-task1] Set up the HW Tx Head and Tail descriptor pointers */
+    e1000_write_reg(e1000, E1000_TDH, 0);  // 头指针指向第一个描述符
+    e1000_write_reg(e1000, E1000_TDT, 0);  // 尾指针也指向第一个描述符
 
     /* TODO: [p5-task1] Program the Transmit Control Register */
+    uint32_t tctl = 0;
+    tctl |= E1000_TCTL_EN;
+    tctl |= E1000_TCTL_PSP;
+    tctl |= (E1000_TCTL_CT & (0x10 << 4));
+    tctl |= (E1000_TCTL_COLD & (0x40 << 12));
+    e1000_write_reg(e1000, E1000_TCTL, tctl);
+
+    local_flush_dcache();
+    
+    // printk("[E1000] TX configuration completed. Descriptors: %d, Buffer size: %d bytes\n", 
+    //        TXDESCS, TX_PKT_SIZE);
 }
 
 /**
@@ -69,16 +107,51 @@ static void e1000_configure_tx(void)
 static void e1000_configure_rx(void)
 {
     /* TODO: [p5-task2] Set e1000 MAC Address to RAR[0] */
+    uint32_t rar_low = enetaddr[0] | (enetaddr[1] << 8) | (enetaddr[2] << 16) | (enetaddr[3] << 24);
+    uint32_t rar_high = enetaddr[4] | (enetaddr[5] << 8);
+    e1000_write_reg_array(e1000, E1000_RA, 0, rar_low);
+    e1000_write_reg_array(e1000, E1000_RA, 1, rar_high | E1000_RAH_AV); // 设置有效 bit
 
     /* TODO: [p5-task2] Initialize rx descriptors */
+    // 清空接收描述符
+    memset(rx_desc_array, 0, sizeof(rx_desc_array));
+    for (int i = 0; i < RXDESCS; i++) {
+        // 设置缓冲区物理地址（注意：DMA需要物理地址）
+        assert(&rx_pkt_buffer[i][0] >= 0xffffffc050000000lu && &rx_pkt_buffer[i][0] <= 0xffffffc060000000lu);
+        rx_desc_array[i].addr = (uint64_t)kva2pa((uintptr_t)&rx_pkt_buffer[i][0]);
+        rx_desc_array[i].length = 0;
+        rx_desc_array[i].csum = 0;
+        rx_desc_array[i].status = 0;
+        rx_desc_array[i].errors = 0;
+        rx_desc_array[i].special = 0;
+    }
 
     /* TODO: [p5-task2] Set up the Rx descriptor base address and length */
+    // 获取描述符数组的物理地址
+    uint64_t rx_desc_phys = kva2pa((uintptr_t)rx_desc_array);
+    // 设置低32位地址
+    e1000_write_reg(e1000, E1000_RDBAL, (uint32_t)(rx_desc_phys & 0xFFFFFFFF));
+    // 设置高32位地址（对于64位系统）
+    e1000_write_reg(e1000, E1000_RDBAH, (uint32_t)(rx_desc_phys >> 32));
+
+    uint32_t rx_desc_len = RXDESCS * sizeof(struct e1000_rx_desc);
+    e1000_write_reg(e1000, E1000_RDLEN, rx_desc_len);
 
     /* TODO: [p5-task2] Set up the HW Rx Head and Tail descriptor pointers */
+    e1000_write_reg(e1000, E1000_RDH, 0);  // 头指针指向第一个描述符
+    e1000_write_reg(e1000, E1000_RDT, RXDESCS - 1);  // 尾指针指向最后一个描述符
 
     /* TODO: [p5-task2] Program the Receive Control Register */
+    uint32_t rctl = 0;
+    rctl |= E1000_RCTL_EN;  // 启用接收
+    rctl |= E1000_RCTL_BAM; // 启用广播接收
+    rctl |= E1000_RCTL_SZ_2048; // 设置接收缓冲区大小为2048字节
+    e1000_write_reg(e1000, E1000_RCTL, rctl);
 
     /* TODO: [p5-task4] Enable RXDMT0 Interrupt */
+
+    
+    local_flush_dcache();
 }
 
 /**
@@ -105,8 +178,35 @@ void e1000_init(void)
 int e1000_transmit(void *txpacket, int length)
 {
     /* TODO: [p5-task1] Transmit one packet from txpacket */
+    local_flush_dcache();
 
-    return 0;
+    if (!txpacket || length <= 0) {
+        assert(0);
+    }
+
+    uint32_t tail = e1000_read_reg(e1000, E1000_TDT);
+
+    struct e1000_tx_desc *tx_desc_tail = &tx_desc_array[tail];
+
+    assert(tx_desc_tail->cmd & E1000_TXD_CMD_RS);
+
+    if (!(tx_desc_tail->status & E1000_TXD_STAT_DD)) {
+        // printl("[E1000] TX warning: Descriptor not ready, waiting...\n");
+        return 0;
+    }
+
+    tx_desc_tail->length = (length > TX_PKT_SIZE ? TX_PKT_SIZE : length);
+    memcpy((uint8_t *)tx_pkt_buffer[tail], (uint8_t *)txpacket, tx_desc_tail->length);
+    tx_desc_tail->status = 0;
+
+    tx_desc_tail->cmd |= E1000_TXD_CMD_RS;
+    if(tx_desc_tail->length == length) {
+        tx_desc_tail->cmd |= E1000_TXD_CMD_EOP;
+    }
+    
+    e1000_write_reg(e1000, E1000_TDT, (tail + 1) % TXDESCS);
+    local_flush_dcache();
+    return tx_desc_tail->length;
 }
 
 /**
@@ -116,7 +216,27 @@ int e1000_transmit(void *txpacket, int length)
  **/
 int e1000_poll(void *rxbuffer)
 {
-    /* TODO: [p5-task2] Receive one packet and put it into rxbuffer */
+    
 
-    return 0;
+    /* TODO: [p5-task2] Receive one packet and put it into rxbuffer */
+    local_flush_dcache();
+    if (!rxbuffer) {
+        assert(0);
+    }
+    uint32_t next_tail = (e1000_read_reg(e1000, E1000_RDT) + 1) % RXDESCS;
+    struct e1000_rx_desc *rx_desc_tail = &rx_desc_array[next_tail];
+
+    printl("rx_desc_tail->status: %d\n", rx_desc_tail->status);
+
+    if (!(rx_desc_tail->status & E1000_RXD_STAT_DD)) {
+        return 0;
+    }
+    uint16_t pkt_len = rx_desc_tail->length;
+    memcpy((uint8_t *)rxbuffer, (uint8_t *)rx_pkt_buffer[next_tail], pkt_len);
+    rx_desc_tail->status = 0;
+    e1000_write_reg(e1000, E1000_RDT, next_tail);
+
+    local_flush_dcache();
+    
+    return pkt_len;
 }

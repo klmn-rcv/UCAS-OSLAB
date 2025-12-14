@@ -6,6 +6,7 @@
 #include <os/task.h>
 #include <os/string.h>
 #include <os/smp.h>
+#include <os/net.h>
 #include <screen.h>
 #include <printk.h>
 #include <assert.h>
@@ -15,6 +16,7 @@
 extern int create_task(char *taskname);
 extern void init_pcb_stack(ptr_t kernel_stack, ptr_t user_stack, ptr_t entry_point, pcb_t *pcb);
 //extern void sys_thread_exit();
+extern void clear_wait_queue(list_head *queue);
 
 pcb_t pcb[NUM_MAX_TASK];
 // pcb_t tcb[NUM_MAX_TASK];
@@ -155,9 +157,9 @@ static list_node_t *find_next_node() {
     for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
         next_node = node->next;
         pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
-        if(node_pcb->pid == 0 || node_pcb->pid == 1) {
-            continue;
-        }
+        // if(node_pcb->pid == 0 || node_pcb->pid == 1) {
+        //     continue;
+        // }
         uint32_t cpu_mask = (1U << cpuid);
         if(node_pcb->run_core_mask & cpu_mask) {
             result_node = node;
@@ -165,17 +167,17 @@ static list_node_t *find_next_node() {
         }
     }
 
-    if (result_node == NULL) {
-        for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
-            next_node = node->next;
-            pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
-            uint32_t cpu_mask = (1U << cpuid);
-            if(node_pcb->run_core_mask & cpu_mask) {
-                result_node = node;
-                break;
-            }
-        }
-    }
+    // if (result_node == NULL) {
+    //     for(node = LIST_FIRST(&ready_queue); node != &ready_queue; node = next_node) {
+    //         next_node = node->next;
+    //         pcb_t *node_pcb = LIST_ENTRY(node, pcb_t, list);
+    //         uint32_t cpu_mask = (1U << cpuid);
+    //         if(node_pcb->run_core_mask & cpu_mask) {
+    //             result_node = node;
+    //             break;
+    //         }
+    //     }
+    // }
     return result_node;
 }
 
@@ -183,6 +185,10 @@ void do_scheduler(void)
 {
     // TODO: [p2-task3] Check sleep queue to wake up PCBs
     check_sleeping();
+
+    // 暂时性地用时钟中断代替网卡中断，清空send_block_queue和recv_block_queue
+    clear_wait_queue(&send_block_queue);
+    clear_wait_queue(&recv_block_queue);
 
     /************************************************************/
     // TODO: [p5-task3] Check send/recv queue to unblock PCBs

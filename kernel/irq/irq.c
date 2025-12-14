@@ -54,9 +54,8 @@ void handle_page_fault(regs_context_t *regs, uint64_t stval, uint64_t scause) {
     uintptr_t pgdir = current_running->pgdir;
     // PTE* pte = page_walk(pgdir, va);  // 查找页表项
     // PTE pte;
-    int already_exist = 0;
     // printl("alloc_page_helper 2, va is: %lx\n", va);
-    uintptr_t physic_page_kva = alloc_page_helper(va, current_running->pid, pgdir, &already_exist);
+    uintptr_t physic_page_kva = alloc_page_helper(va, current_running->pid, pgdir);
     
     // 刷新TLB
     local_flush_tlb_page(va);
