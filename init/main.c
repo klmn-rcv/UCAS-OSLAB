@@ -339,12 +339,12 @@ static void ioremap_init() {
     e1000 = (volatile uint8_t *)bios_read_fdt(ETHERNET_ADDR); // 从设备树中获取MAC内部寄存器的起始地址
     uint64_t plic_addr = bios_read_fdt(PLIC_ADDR);
     uint32_t nr_irqs = (uint32_t)bios_read_fdt(NR_IRQS);
-    printk("> [INIT] e1000: %lx, plic_addr: %lx, nr_irqs: %lx.\n", e1000, plic_addr, nr_irqs);
+    // printk("> [INIT] e1000: %lx, plic_addr: %lx, nr_irqs: %lx.\n", e1000, plic_addr, nr_irqs);
 
     // IOremap
     plic_addr = (uintptr_t)ioremap((uint64_t)plic_addr, 0x4000 * NORMAL_PAGE_SIZE);
     e1000 = (uint8_t *)ioremap((uint64_t)e1000, 8 * NORMAL_PAGE_SIZE);
-    printk("> [INIT] IOremap initialization succeeded.\n");
+    // printk("> [INIT] IOremap initialization succeeded.\n");
 }
 
 int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
@@ -366,13 +366,22 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 
         init_pageframe_manager();
 
+        ioremap_init();
+
         // Init Process Control Blocks |•'-'•) ✧
         init_pcb(/*tasknum*/);
         // init_tcb();
         printk("> [INIT] PCB initialization succeeded.\n");
 
-        // Read CPU frequency (｡•ᴗ-)_
-        time_base = bios_read_fdt(TIMEBASE);
+        // // Read CPU frequency (｡•ᴗ-)_
+        // time_base = bios_read_fdt(TIMEBASE);
+
+        
+
+        // TODO: [p5-task4] Init plic
+        // plic_init(plic_addr, nr_irqs);
+        // printk("> [INIT] PLIC initialized successfully. addr = 0x%lx, nr_irqs=0x%x\n", plic_addr, nr_irqs);
+
 
         // Init lock mechanism o(´^｀)o
         init_locks();
@@ -386,11 +395,6 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         init_exception();
         printk("> [INIT] Interrupt processing initialization succeeded.\n");
 
-        // TODO: [p5-task4] Init plic
-        // plic_init(plic_addr, nr_irqs);
-        // printk("> [INIT] PLIC initialized successfully. addr = 0x%lx, nr_irqs=0x%x\n", plic_addr, nr_irqs);
-
-        ioremap_init();
 
         // Init network device
         e1000_init();

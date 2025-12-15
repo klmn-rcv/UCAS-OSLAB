@@ -162,7 +162,7 @@ viewlog:
 	@tail -f $(QEMU_LOG_FILE)
 
 minicom:
-	sudo $(MINICOM) -D $(TTYUSB1) -C ./fpga.log
+	sudo $(MINICOM) -D $(TTYUSB1) -X ./fpga.log
 
 .PHONY: all dirs clean floppy asm gdb run debug viewlog minicom run-net debug-net
 

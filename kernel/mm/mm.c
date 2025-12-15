@@ -576,9 +576,12 @@ void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir)
     // 不用拷贝内核二级页表，内核二级页表由所有进程共用。因为一级页表的PTE本身就指向那里
     // 将内核一级页表先拷贝给用户一级页表，此时用户页表还没建立。这一步拷贝相当于初始化
     // 不用担心后续用户页表的建立和分配会覆盖拷贝的内核一级页表
-    uint64_t vpn2 = (0xffffffc050000000 & VA_MASK) >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
-    assert(vpn2 == 257);
-    memcpy((uint8_t *)(&((PTE *)dest_pgdir)[vpn2]), (uint8_t *)(&((PTE *)src_pgdir)[vpn2]), sizeof(PTE));
+    // uint64_t vpn2 = (0xffffffc050000000 & VA_MASK) >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
+    // assert(vpn2 == 257);
+    // memcpy((uint8_t *)(&((PTE *)dest_pgdir)[vpn2]), (uint8_t *)(&((PTE *)src_pgdir)[vpn2]), sizeof(PTE));
+
+    memcpy((uint8_t *)dest_pgdir, (uint8_t *)src_pgdir, PAGE_SIZE);
+    ((PTE *)dest_pgdir)[0] = 0;
 }
 
 /* allocate physical page for `va`, mapping it into `pgdir`,
@@ -713,7 +716,7 @@ void create_mapping(uintptr_t va, uintptr_t pa, uintptr_t pgdir, int kernel) {
 
         // printl("va is: %lx\n", va);
 
-        uint64_t pfn = kva2pa(allocPage(current_running->pid, &pgd[vpn2], 1)) >> NORMAL_PAGE_SHIFT;
+        uint64_t pfn = kva2pa(allocPage(0, &pgd[vpn2], 1)) >> NORMAL_PAGE_SHIFT;
         set_pfn(&pgd[vpn2], pfn);
         set_attribute(&pgd[vpn2], _PAGE_PRESENT);
         clear_pgdir(pa2kva(get_pa(pgd[vpn2])));
@@ -725,7 +728,7 @@ void create_mapping(uintptr_t va, uintptr_t pa, uintptr_t pgdir, int kernel) {
 
     PTE *pmd = (PTE *)pa2kva(get_pa(pgd[vpn2]));
     if (pmd[vpn1] == 0) {
-        uint64_t pfn = kva2pa(allocPage(current_running->pid, &pmd[vpn1], 1)) >> NORMAL_PAGE_SHIFT;
+        uint64_t pfn = kva2pa(allocPage(0, &pmd[vpn1], 1)) >> NORMAL_PAGE_SHIFT;
         set_pfn(&pmd[vpn1], pfn);
         set_attribute(&pmd[vpn1], _PAGE_PRESENT);
         clear_pgdir(pa2kva(get_pa(pmd[vpn1])));
