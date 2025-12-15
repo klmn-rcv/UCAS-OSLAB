@@ -576,12 +576,8 @@ void share_pgtable(uintptr_t dest_pgdir, uintptr_t src_pgdir)
     // 不用拷贝内核二级页表，内核二级页表由所有进程共用。因为一级页表的PTE本身就指向那里
     // 将内核一级页表先拷贝给用户一级页表，此时用户页表还没建立。这一步拷贝相当于初始化
     // 不用担心后续用户页表的建立和分配会覆盖拷贝的内核一级页表
-    // uint64_t vpn2 = (0xffffffc050000000 & VA_MASK) >> (NORMAL_PAGE_SHIFT + PPN_BITS + PPN_BITS);
-    // assert(vpn2 == 257);
-    // memcpy((uint8_t *)(&((PTE *)dest_pgdir)[vpn2]), (uint8_t *)(&((PTE *)src_pgdir)[vpn2]), sizeof(PTE));
-
     memcpy((uint8_t *)dest_pgdir, (uint8_t *)src_pgdir, PAGE_SIZE);
-    ((PTE *)dest_pgdir)[0] = 0;
+    ((PTE *)dest_pgdir)[1] = 0; // 取消临时映射
 }
 
 /* allocate physical page for `va`, mapping it into `pgdir`,
