@@ -16,7 +16,7 @@
 extern int create_task(char *taskname);
 extern void init_pcb_stack(ptr_t kernel_stack, ptr_t user_stack, ptr_t entry_point, pcb_t *pcb);
 //extern void sys_thread_exit();
-extern void clear_wait_queue(list_head *queue);
+// void clear_wait_queue(list_head *queue);
 
 pcb_t pcb[NUM_MAX_TASK];
 // pcb_t tcb[NUM_MAX_TASK];
@@ -186,9 +186,9 @@ void do_scheduler(void)
     // TODO: [p2-task3] Check sleep queue to wake up PCBs
     check_sleeping();
 
-    // 暂时性地用时钟中断代替网卡中断，清空send_block_queue和recv_block_queue
-    clear_wait_queue(&send_block_queue);
-    clear_wait_queue(&recv_block_queue);
+    // // 暂时性地用时钟中断代替网卡中断，清空send_block_queue和recv_block_queue
+    // clear_wait_queue(&send_block_queue);
+    // clear_wait_queue(&recv_block_queue);
 
     /************************************************************/
     // TODO: [p5-task3] Check send/recv queue to unblock PCBs

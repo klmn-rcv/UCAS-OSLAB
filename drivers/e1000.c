@@ -2,15 +2,18 @@
 #include <type.h>
 #include <os/string.h>
 #include <os/time.h>
+#include <os/net.h>
 #include <assert.h>
 #include <pgtable.h>
+
+extern void clear_wait_queue(list_head *queue);
 
 // E1000 Registers Base Pointer
 volatile uint8_t *e1000;  // use virtual memory address
 
 // E1000 Tx & Rx Descriptors
 static struct e1000_tx_desc tx_desc_array[TXDESCS] __attribute__((aligned(16)));
-static struct e1000_rx_desc rx_desc_array[RXDESCS] __attribute__((aligned(16)));
+static volatile struct e1000_rx_desc rx_desc_array[RXDESCS] __attribute__((aligned(16)));
 
 // E1000 Tx & Rx packet buffer
 static char tx_pkt_buffer[TXDESCS][TX_PKT_SIZE];
@@ -167,6 +170,9 @@ void e1000_init(void)
 
     /* Configure E1000 Rx Unit */
     e1000_configure_rx();
+
+    e1000_write_reg(e1000, E1000_IMS, E1000_IMS_TXQE | E1000_IMS_RXDMT0);
+    local_flush_dcache();
 }
 
 /**
@@ -216,8 +222,6 @@ int e1000_transmit(void *txpacket, int length)
  **/
 int e1000_poll(void *rxbuffer)
 {
-    
-
     /* TODO: [p5-task2] Receive one packet and put it into rxbuffer */
     local_flush_dcache();
     if (!rxbuffer) {
@@ -239,4 +243,12 @@ int e1000_poll(void *rxbuffer)
     local_flush_dcache();
     
     return pkt_len;
+}
+
+void e1000_handle_txqe() {
+    clear_wait_queue(&send_block_queue);
+}
+
+void e1000_handle_rxdmt0() {
+    clear_wait_queue(&recv_block_queue);
 }

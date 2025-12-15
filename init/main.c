@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <type.h>
 #include <csr.h>
+#include <plic.h>
 
 #define TASK_NUM 1
 
@@ -345,6 +346,10 @@ static void ioremap_init() {
     plic_addr = (uintptr_t)ioremap((uint64_t)plic_addr, 0x4000 * NORMAL_PAGE_SIZE);
     e1000 = (uint8_t *)ioremap((uint64_t)e1000, 8 * NORMAL_PAGE_SIZE);
     // printk("> [INIT] IOremap initialization succeeded.\n");
+
+    // TODO: [p5-task4] Init plic
+    plic_init(plic_addr, nr_irqs);
+    // printk("> [INIT] PLIC initialized successfully. addr = 0x%lx, nr_irqs=0x%x\n", plic_addr, nr_irqs);
 }
 
 int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
@@ -375,12 +380,6 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 
         // // Read CPU frequency (｡•ᴗ-)_
         // time_base = bios_read_fdt(TIMEBASE);
-
-        
-
-        // TODO: [p5-task4] Init plic
-        // plic_init(plic_addr, nr_irqs);
-        // printk("> [INIT] PLIC initialized successfully. addr = 0x%lx, nr_irqs=0x%x\n", plic_addr, nr_irqs);
 
 
         // Init lock mechanism o(´^｀)o

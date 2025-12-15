@@ -440,4 +440,7 @@ void e1000_init(void);
 int e1000_transmit(void *txpacket, int length);
 int e1000_poll(void *rxbuffer);
 
+void e1000_handle_txqe();
+void e1000_handle_rxdmt0();
+
 #endif  // !_E1000_HW_H_

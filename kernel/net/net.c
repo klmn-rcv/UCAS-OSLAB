@@ -4,6 +4,7 @@
 #include <os/string.h>
 #include <os/list.h>
 #include <os/smp.h>
+#include <assert.h>
 
 LIST_HEAD(send_block_queue);
 LIST_HEAD(recv_block_queue);
@@ -55,4 +56,14 @@ int do_net_recv(void *rxbuffer, int pkt_num, int *pkt_lens)
 void net_handle_irq(void)
 {
     // TODO: [p5-task4] Handle interrupts from network device
+    uint32_t icr = e1000_read_reg(e1000, E1000_ICR);
+    if (icr & E1000_ICR_TXQE) {
+        e1000_handle_txqe();
+    }
+    else if (icr & E1000_ICR_RXDMT0) {
+        e1000_handle_rxdmt0();        
+    }
+    else {
+        assert(0);
+    }
 }
