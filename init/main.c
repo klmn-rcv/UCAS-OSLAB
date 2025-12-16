@@ -286,15 +286,16 @@ static void init_syscall(void)
     syscall[SYSCALL_MBOX_RECV]         = (long (*)(long,long,long,long,long))do_mbox_recv;
 
     syscall[SYSCALL_FREE_MEM]          = (long (*)(long,long,long,long,long))get_free_memory;
-    syscall[SYSCALL_PIPE_OPEN]          = (long (*)(long,long,long,long,long))do_pipe_open;
-    syscall[SYSCALL_PIPE_GIVE]          = (long (*)(long,long,long,long,long))do_pipe_give_pages;
-    syscall[SYSCALL_PIPE_TAKE]          = (long (*)(long,long,long,long,long))do_pipe_take_pages;
+    syscall[SYSCALL_PIPE_OPEN]         = (long (*)(long,long,long,long,long))do_pipe_open;
+    syscall[SYSCALL_PIPE_GIVE]         = (long (*)(long,long,long,long,long))do_pipe_give_pages;
+    syscall[SYSCALL_PIPE_TAKE]         = (long (*)(long,long,long,long,long))do_pipe_take_pages;
 
     syscall[SYSCALL_TASKSET]           = (long (*)(long,long,long,long,long))do_taskset;
     syscall[SYSCALL_TASKSET_P]         = (long (*)(long,long,long,long,long))do_taskset_p;
 
     syscall[SYSCALL_NET_SEND]          = (long (*)(long,long,long,long,long))do_net_send;
     syscall[SYSCALL_NET_RECV]          = (long (*)(long,long,long,long,long))do_net_recv;
+    syscall[SYSCALL_NET_RECV_STREAM]   = (long (*)(long,long,long,long,long))do_net_recv_stream;
 
     // syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
     // syscall[SYSCALL_THREAD_JOIN]       = (long (*)(long,long,long,long,long))do_thread_join;
@@ -372,6 +373,7 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
         init_pageframe_manager();
 
         ioremap_init();
+        init_free_rtp_nodes();
 
         // Init Process Control Blocks |•'-'•) ✧
         init_pcb(/*tasknum*/);

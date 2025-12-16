@@ -171,7 +171,7 @@ void e1000_init(void)
     /* Configure E1000 Rx Unit */
     e1000_configure_rx();
 
-    e1000_write_reg(e1000, E1000_IMS, E1000_IMS_TXQE | E1000_IMS_RXDMT0);
+    e1000_write_reg(e1000, E1000_IMS, E1000_IMS_TXQE | E1000_IMS_RXDMT0 | E1000_IMS_RXT0);
     local_flush_dcache();
 }
 

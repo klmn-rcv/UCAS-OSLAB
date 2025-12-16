@@ -330,4 +330,9 @@ int sys_net_recv(void *rxbuffer, int pkt_num, int *pkt_lens)
     int received_len = invoke_syscall(SYSCALL_NET_RECV, (long)rxbuffer, (long)pkt_num, (long)pkt_lens, 0, 0);
     return received_len;
 }
+
+int sys_net_recv_stream(void *buffer, int *nbytes) {
+    int received_len = invoke_syscall(SYSCALL_NET_RECV_STREAM, (long)buffer, (long)nbytes, 0, 0, 0);
+    return received_len;
+}
 /************************************************************/

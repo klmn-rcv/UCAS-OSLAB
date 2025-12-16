@@ -6,3 +6,5 @@ build
 *.exp
 *.sh
 fpga.log
+tools/pkt-rx-tx-master/temp.txt
+tools/pkt-rx-tx-master/fletcher16.py
