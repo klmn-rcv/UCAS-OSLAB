@@ -26,22 +26,20 @@ extern list_head recv_block_queue;
 #define RTP_FLAGS_ACK 0x04
 #define RETRANS_TIMEOUT 1000000
 
-// 静态节点池
-#define MAX_RTP_NODES 64  // 可以适当增大，因为现在只处理RTP包
+#define MAX_RTP_NODES 64
 
-// 无序RTP协议包结构
 typedef struct rtp_packet_node {
-    list_node_t list;           // 链表节点
-    uint32_t seq;               // 序号
-    uint16_t len;               // 数据长度
-    uint8_t data[2048];  // 数据缓冲区
+    list_node_t list;
+    uint32_t seq;
+    uint16_t len;
+    uint8_t data[2048];
 } rtp_packet_node_t;
 
 struct rtp_proto_header {
     uint8_t magic;      // Magic number to identify RTP protocol
     uint8_t flags;      // Flags
-    uint16_t len;      // Length of the data
-    uint32_t seq;      // Sequence number
+    uint16_t len;       // Length of the data
+    uint32_t seq;       // Sequence number
 };
 
 void net_handle_irq(void);
