@@ -3,6 +3,7 @@
 #include <os/string.h>
 #include <os/time.h>
 #include <os/net.h>
+#include <os/sched.h>
 #include <assert.h>
 #include <pgtable.h>
 
@@ -173,14 +174,14 @@ void e1000_init(void)
 
     // e1000_write_reg(e1000, E1000_RDTR, 0);     // 配置包定时器
 	// e1000_write_reg(e1000, E1000_RADV, 0);     // 配置绝对定时器
-    e1000_write_reg(e1000, E1000_RDTR, 0x12345678);
-    e1000_write_reg(e1000, E1000_RADV, 0x87654321);
-    printl("write RDTR and RADV finish\n");
-    uint32_t rdtr = e1000_read_reg(e1000, E1000_RDTR);
-    uint32_t radv = e1000_read_reg(e1000, E1000_RADV);
+    // e1000_write_reg(e1000, E1000_RDTR, 0x12345678);
+    // e1000_write_reg(e1000, E1000_RADV, 0x87654321);
+    // printl("write RDTR and RADV finish\n");
+    // uint32_t rdtr = e1000_read_reg(e1000, E1000_RDTR);
+    // uint32_t radv = e1000_read_reg(e1000, E1000_RADV);
     e1000_write_reg(e1000, E1000_IMS, E1000_IMS_TXQE | E1000_IMS_RXDMT0 | E1000_IMS_RXT0);
     local_flush_dcache();
-    printl("After init: RDTR = %u, RADV = %u\n", rdtr, radv);
+    // printl("After init: RDTR = %u, RADV = %u\n", rdtr, radv);
 }
 
 /**
@@ -200,27 +201,48 @@ int e1000_transmit(void *txpacket, int length)
 
     uint32_t tail = e1000_read_reg(e1000, E1000_TDT);
 
-    struct e1000_tx_desc *tx_desc_tail = &tx_desc_array[tail];
+    struct e1000_tx_desc *tx_desc_tail;
 
-    assert(tx_desc_tail->cmd & E1000_TXD_CMD_RS);
+    // struct e1000_tx_desc *tx_desc_tail = &tx_desc_array[tail];
 
-    if (!(tx_desc_tail->status & E1000_TXD_STAT_DD)) {
-        // printl("[E1000] TX warning: Descriptor not ready, waiting...\n");
-        return 0;
-    }
+    // assert(tx_desc_tail->cmd & E1000_TXD_CMD_RS);
 
-    tx_desc_tail->length = (length > TX_PKT_SIZE ? TX_PKT_SIZE : length);
-    memcpy((uint8_t *)tx_pkt_buffer[tail], (uint8_t *)txpacket, tx_desc_tail->length);
-    tx_desc_tail->status = 0;
+    // while (!(tx_desc_tail->status & E1000_TXD_STAT_DD)) {
+    //     do_block(&current_running->list, &send_block_queue);
+    // }
 
-    tx_desc_tail->cmd |= E1000_TXD_CMD_RS;
-    if(tx_desc_tail->length == length) {
-        tx_desc_tail->cmd |= E1000_TXD_CMD_EOP;
-    }
-    
-    e1000_write_reg(e1000, E1000_TDT, (tail + 1) % TXDESCS);
+    int total_len = 0;
+
+    while(1) {
+        tx_desc_tail = &tx_desc_array[tail];
+        assert(tx_desc_tail->cmd & E1000_TXD_CMD_RS);
+        while (!(tx_desc_tail->status & E1000_TXD_STAT_DD)) {
+            do_block(&current_running->list, &send_block_queue);
+        }
+        
+        tx_desc_tail->length = (length > TX_PKT_SIZE ? TX_PKT_SIZE : length);
+        local_flush_dcache();
+        memcpy((uint8_t *)tx_pkt_buffer[tail], (uint8_t *)txpacket, tx_desc_tail->length);
+        tx_desc_tail->status = 0;
+        
+
+        tx_desc_tail->cmd |= E1000_TXD_CMD_RS;
+        if(tx_desc_tail->length == length) {
+            tx_desc_tail->cmd |= E1000_TXD_CMD_EOP;
+            e1000_write_reg(e1000, E1000_TDT, (tail + 1) % TXDESCS);
+            total_len += tx_desc_tail->length;
+            break;
+        }
+        
+        e1000_write_reg(e1000, E1000_TDT, (tail + 1) % TXDESCS);
+        total_len += tx_desc_tail->length;
+        tail = (tail + 1) % TXDESCS;
+        length -= tx_desc_tail->length;
+        txpacket = (void *)((uintptr_t)txpacket + tx_desc_tail->length);
+        local_flush_dcache();
+    }    
     local_flush_dcache();
-    return tx_desc_tail->length;
+    return total_len;
 }
 
 /**
@@ -236,21 +258,84 @@ int e1000_poll(void *rxbuffer)
         assert(0);
     }
     uint32_t next_tail = (e1000_read_reg(e1000, E1000_RDT) + 1) % RXDESCS;
-    struct e1000_rx_desc *rx_desc_tail = &rx_desc_array[next_tail];
+    struct e1000_rx_desc *rx_desc_tail;
+    // struct e1000_rx_desc *rx_desc_tail = &rx_desc_array[next_tail];
 
-    printl("rx_desc_tail->status: %d\n", rx_desc_tail->status);
+    // // printl("rx_desc_tail->status: %d\n", rx_desc_tail->status);
 
-    if (!(rx_desc_tail->status & E1000_RXD_STAT_DD)) {
-        return 0;
+    // while (!(rx_desc_tail->status & E1000_RXD_STAT_DD)) {
+    //     do_block(&current_running->list, &recv_block_queue);
+    // }
+    int total_len = 0;
+
+    while(1) {
+        rx_desc_tail = &rx_desc_array[next_tail];
+        while (!(rx_desc_tail->status & E1000_RXD_STAT_DD)) {
+            do_block(&current_running->list, &recv_block_queue);
+        }
+
+        uint16_t pkt_len = rx_desc_tail->length;
+        local_flush_dcache();
+        memcpy((uint8_t *)rxbuffer, (uint8_t *)rx_pkt_buffer[next_tail], pkt_len);
+        total_len += pkt_len;
+
+        if(rx_desc_tail->status & E1000_RXD_STAT_EOP) {
+            rx_desc_tail->status = 0;
+            e1000_write_reg(e1000, E1000_RDT, next_tail);
+            break;
+        }
+
+        rxbuffer = (void *)((uintptr_t)rxbuffer + pkt_len);
+        rx_desc_tail->status = 0;
+        e1000_write_reg(e1000, E1000_RDT, next_tail);
+        next_tail = (next_tail + 1) % RXDESCS;
+        local_flush_dcache();
     }
-    uint16_t pkt_len = rx_desc_tail->length;
-    memcpy((uint8_t *)rxbuffer, (uint8_t *)rx_pkt_buffer[next_tail], pkt_len);
-    rx_desc_tail->status = 0;
-    e1000_write_reg(e1000, E1000_RDT, next_tail);
+
+    // uint16_t pkt_len = rx_desc_tail->length;
+    // memcpy((uint8_t *)rxbuffer, (uint8_t *)rx_pkt_buffer[next_tail], pkt_len);
+    // rx_desc_tail->status = 0;
+    // e1000_write_reg(e1000, E1000_RDT, next_tail);
 
     local_flush_dcache();
-    
-    return pkt_len;
+    return total_len;
+}
+
+int e1000_poll_for_stream(void *rxbuffer)
+{
+    local_flush_dcache();
+    if (!rxbuffer) {
+        assert(0);
+    }
+    uint32_t next_tail = (e1000_read_reg(e1000, E1000_RDT) + 1) % RXDESCS;
+    struct e1000_rx_desc *rx_desc_tail;
+    int total_len = 0;
+    while(1) {
+        rx_desc_tail = &rx_desc_array[next_tail];
+        if (!(rx_desc_tail->status & E1000_RXD_STAT_DD)) {
+            return 0;   // no packet available now
+        }
+
+        uint16_t pkt_len = rx_desc_tail->length;
+        local_flush_dcache();
+        memcpy((uint8_t *)rxbuffer, (uint8_t *)rx_pkt_buffer[next_tail], pkt_len);
+        total_len += pkt_len;
+
+        if(rx_desc_tail->status & E1000_RXD_STAT_EOP) {
+            rx_desc_tail->status = 0;
+            e1000_write_reg(e1000, E1000_RDT, next_tail);
+            break;
+        }
+
+        rxbuffer = (void *)((uintptr_t)rxbuffer + pkt_len);
+        rx_desc_tail->status = 0;
+        e1000_write_reg(e1000, E1000_RDT, next_tail);
+        next_tail = (next_tail + 1) % RXDESCS;
+        local_flush_dcache();
+    }
+
+    local_flush_dcache();
+    return total_len;
 }
 
 void e1000_handle_txqe() {

@@ -439,6 +439,7 @@ extern volatile uint8_t *e1000;
 void e1000_init(void);
 int e1000_transmit(void *txpacket, int length);
 int e1000_poll(void *rxbuffer);
+int e1000_poll_for_stream(void *rxbuffer);
 
 void e1000_handle_txqe();
 void e1000_handle_rxdmt0();

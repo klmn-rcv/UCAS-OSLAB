@@ -386,11 +386,16 @@ void do_process_show(void) {
     printk("[Process Table]\n");
     for(int i = 0; i < NUM_MAX_TASK; i++) {
         if(pcb[i].status != TASK_EXITED) {
-            printk("[%d] PID : %d  STATUS : %s mask: %x", i, pcb[i].pid, status[pcb[i].status], pcb[i].run_core_mask);
-            if(pcb[i].status == TASK_RUNNING) {
-                printk(" Running on core %d\n", pcb[i].running_core_id);
-            } else {
-                printk("\n");
+            if(pcb[i].killed == 0) {
+                printk("[%d] PID : %d  STATUS : %s mask: %x", i, pcb[i].pid, status[pcb[i].status], pcb[i].run_core_mask);
+                if(pcb[i].status == TASK_RUNNING) {
+                    printk(" Running on core %d\n", pcb[i].running_core_id);
+                } else {
+                    printk("\n");
+                }
+            }
+            else {
+                printk("[%d] PID : %d  STATUS : (KILLED) mask: %x\n", i, pcb[i].pid, pcb[i].run_core_mask);
             }
         }
     }
