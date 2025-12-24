@@ -171,8 +171,16 @@ void e1000_init(void)
     /* Configure E1000 Rx Unit */
     e1000_configure_rx();
 
+    // e1000_write_reg(e1000, E1000_RDTR, 0);     // 配置包定时器
+	// e1000_write_reg(e1000, E1000_RADV, 0);     // 配置绝对定时器
+    e1000_write_reg(e1000, E1000_RDTR, 0x12345678);
+    e1000_write_reg(e1000, E1000_RADV, 0x87654321);
+    printl("write RDTR and RADV finish\n");
+    uint32_t rdtr = e1000_read_reg(e1000, E1000_RDTR);
+    uint32_t radv = e1000_read_reg(e1000, E1000_RADV);
     e1000_write_reg(e1000, E1000_IMS, E1000_IMS_TXQE | E1000_IMS_RXDMT0 | E1000_IMS_RXT0);
     local_flush_dcache();
+    printl("After init: RDTR = %u, RADV = %u\n", rdtr, radv);
 }
 
 /**
@@ -251,4 +259,5 @@ void e1000_handle_txqe() {
 
 void e1000_handle_rxdmt0() {
     clear_wait_queue(&recv_block_queue);
+    clear_wait_queue(&recv_stream_block_queue);
 }

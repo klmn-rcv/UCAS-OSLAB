@@ -17,6 +17,7 @@ struct ethhdr {
 
 extern list_head send_block_queue;
 extern list_head recv_block_queue;
+extern list_head recv_stream_block_queue;
 
 #define RTP_OFFSET 54
 #define RTP_MAGIC 0x45

@@ -162,7 +162,7 @@ viewlog:
 	@tail -f $(QEMU_LOG_FILE)
 
 minicom:
-	sudo $(MINICOM) -D $(TTYUSB1) -X ./fpga.log
+	sudo $(MINICOM) -D $(TTYUSB1) -C ./fpga.log
 
 .PHONY: all dirs clean floppy asm gdb run debug viewlog minicom run-net debug-net
 
@@ -204,6 +204,6 @@ $(ELF_CREATEIMAGE): $(SRC_CREATEIMAGE)
 
 image: $(ELF_CREATEIMAGE) $(ELF_BOOT) $(ELF_MAIN) $(ELF_USER)
 	cd $(DIR_BUILD) && ./$(<F) --extended $(filter-out $(<F), $(^F))
-	dd if=/dev/zero of=build/image oflag=append conv=notrunc bs=320MB count=1
+# dd if=/dev/zero of=build/image oflag=append conv=notrunc bs=320MB count=1
 
 .PHONY: image

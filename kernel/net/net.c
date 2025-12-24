@@ -11,6 +11,7 @@
 
 LIST_HEAD(send_block_queue);
 LIST_HEAD(recv_block_queue);
+LIST_HEAD(recv_stream_block_queue);
 
 int do_net_send(void *txpacket, int length)
 {
@@ -59,16 +60,21 @@ int do_net_recv(void *rxbuffer, int pkt_num, int *pkt_lens)
 void net_handle_irq(void)
 {
     // TODO: [p5-task4] Handle interrupts from network device
-    printl("Enter net_handle_irq...\n");
+    // printl("Enter net_handle_irq...\n");
     uint32_t icr = e1000_read_reg(e1000, E1000_ICR);
     uint32_t ims = e1000_read_reg(e1000, E1000_IMS);
-    printl("net_handle_irq: icr is %x, ims is %x\n", icr, ims);
+    // printl("net_handle_irq: icr is %x, ims is %x\n", icr, ims);
+    
+    if(icr & E1000_ICR_RXT0) {
+        printl("RXT0 interrupt, icr is %x\n", icr);
+    }
+    
     if (icr & E1000_ICR_TXQE & ims) {
-        printl("net_handle_irq: send\n");
+        // printl("net_handle_irq: send\n");
         e1000_handle_txqe();
     }
     else if(icr & (E1000_ICR_RXDMT0 | E1000_ICR_RXT0) & ims) {
-        printl("net_handle_irq: recv\n");
+        // printl("net_handle_irq: recv\n");
         e1000_handle_rxdmt0();
     }
 }
@@ -315,7 +321,7 @@ int do_net_recv_stream(void *buffer, int *nbytes) {
                     reset_timer();
                 }
                 
-                do_block(&current_running->list, &recv_block_queue);
+                do_block(&current_running->list, &recv_stream_block_queue);
                 continue;
             }
 
