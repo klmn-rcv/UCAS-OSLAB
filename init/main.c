@@ -13,6 +13,7 @@
 #include <os/smp.h>
 #include <os/ioremap.h>
 #include <os/net.h>
+#include <os/fs.h>
 #include <sys/syscall.h>
 #include <screen.h>
 #include <e1000.h>
@@ -32,6 +33,13 @@ static uint16_t tasknum;
 static uint32_t task_info_offset;
 
 uint32_t last_nonempty_sector;
+
+static long fs_unimplemented(long a0, long a1, long a2, long a3, long a4)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3; (void)a4;
+    printk("[FS] syscall not implemented\n");
+    return -1;
+}
 
 static void init_jmptab(void)
 {
@@ -297,6 +305,23 @@ static void init_syscall(void)
     syscall[SYSCALL_NET_RECV]          = (long (*)(long,long,long,long,long))do_net_recv;
     syscall[SYSCALL_NET_RECV_STREAM]   = (long (*)(long,long,long,long,long))do_net_recv_stream;
 
+    // filesystem syscalls
+    syscall[SYSCALL_FS_MKFS]           = (long (*)(long,long,long,long,long))do_mkfs;
+    syscall[SYSCALL_FS_STATFS]         = (long (*)(long,long,long,long,long))do_statfs;
+    syscall[SYSCALL_FS_CD]             = (long (*)(long,long,long,long,long))do_cd;
+    syscall[SYSCALL_FS_MKDIR]          = (long (*)(long,long,long,long,long))do_mkdir;
+    syscall[SYSCALL_FS_RMDIR]          = (long (*)(long,long,long,long,long))do_rmdir;
+    syscall[SYSCALL_FS_LS]             = (long (*)(long,long,long,long,long))do_ls;
+    // syscall[SYSCALL_FS_TOUCH]          = fs_unimplemented;   // placeholder
+    // syscall[SYSCALL_FS_CAT]            = fs_unimplemented;   // placeholder
+    syscall[SYSCALL_FS_OPEN]           = (long (*)(long,long,long,long,long))do_open;
+    syscall[SYSCALL_FS_READ]           = (long (*)(long,long,long,long,long))do_read;
+    syscall[SYSCALL_FS_WRITE]          = (long (*)(long,long,long,long,long))do_write;
+    syscall[SYSCALL_FS_CLOSE]          = (long (*)(long,long,long,long,long))do_close;
+    syscall[SYSCALL_FS_LN]             = (long (*)(long,long,long,long,long))do_ln;
+    syscall[SYSCALL_FS_RM]             = (long (*)(long,long,long,long,long))do_rm;
+    syscall[SYSCALL_FS_LSEEK]          = (long (*)(long,long,long,long,long))do_lseek;
+
     // syscall[SYSCALL_THREAD_CREATE]     = (long (*)(long,long,long,long,long))do_thread_create;
     // syscall[SYSCALL_THREAD_JOIN]       = (long (*)(long,long,long,long,long))do_thread_join;
     // syscall[SYSCALL_THREAD_EXIT]       = (long (*)(long,long,long,long,long))do_thread_exit;
@@ -398,12 +423,16 @@ int main(uint16_t tasknum_arg, uint32_t task_info_offset_arg)
 
 
         // Init network device
-        e1000_init();
-        printk("> [INIT] E1000 device initialized successfully.\n");
+        // e1000_init();
+        // printk("> [INIT] E1000 device initialized successfully.\n");
 
         // Init system call table (0_0)
         init_syscall();
         printk("> [INIT] System call initialized successfully.\n");
+
+        // Initialize filesystem before shell starts.
+        fs_init();
+        printk("> [INIT] Filesystem initialized/mounted.\n");
 
         // Init screen (QAQ)
         init_screen();

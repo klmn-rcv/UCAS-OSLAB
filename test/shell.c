@@ -224,6 +224,40 @@ int main(void)
                     }
                 }
             }
+        } else if(strcmp(argv[0], "mkfs") == 0) {
+            sys_mkfs();
+        } else if(strcmp(argv[0], "statfs") == 0) {
+            sys_statfs();
+        } else if(strcmp(argv[0], "cd") == 0) {
+            if(argc < 2) {
+                printf("cd: too few arguments\n");
+                continue;
+            }
+            sys_cd(argv[1]);
+        } else if(strcmp(argv[0], "mkdir") == 0) {
+            if(argc < 2) {
+                printf("mkdir: too few arguments\n");
+                continue;
+            }
+            sys_mkdir(argv[1]);
+        } else if(strcmp(argv[0], "rmdir") == 0) {
+            if(argc < 2) {
+                printf("rmdir: too few arguments\n");
+                continue;
+            }
+            sys_rmdir(argv[1]);
+        } else if(strcmp(argv[0], "ls") == 0) {
+            int option = 0;
+            char *path = 0;
+            if(argc >= 2 && strcmp(argv[1], "-l") == 0) {
+                option = 1;
+                if(argc >= 3) {
+                    path = argv[2];
+                }
+            } else if(argc >= 2) {
+                path = argv[1];
+            }
+            sys_ls(path, option);
         } else {
             printf("%s: command not found\n", argv[0]);
         }

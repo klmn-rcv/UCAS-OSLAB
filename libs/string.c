@@ -1,9 +1,11 @@
 #include <os/string.h>
 
-void memcpy(uint8_t *dest, const uint8_t *src, uint32_t len)
+void memcpy(void *dest, const void *src, uint32_t len)
 {
+    uint8_t *d = (uint8_t *)dest;
+    const uint8_t *s = (const uint8_t *)src;
     for (; len != 0; len--) {
-        *dest++ = *src++;
+        *d++ = *s++;
     }
 }
 
