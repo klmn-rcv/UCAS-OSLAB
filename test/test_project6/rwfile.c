@@ -14,6 +14,9 @@ int main(void)
         sys_fwrite(fd, "hello world!\n", 13);
     }
 
+    // rewind to the start before reading back
+    sys_lseek(fd, 0, SEEK_SET);
+
     // read
     for (int i = 0; i < 10; i++)
     {

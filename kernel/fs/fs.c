@@ -8,13 +8,14 @@
 static fdesc_t fdesc_array[NUM_FDESCS] __attribute__((unused));
 
 // Basic on-disk layout (simple, single-block maps)
-#define FS_START_SECTOR 4096U           // leave space for kernel/tasks
-#define FS_SECTOR_COUNT 65536U          // ~32MiB default filesystem size
-#define FS_BLOCK_SIZE   4096U           // 8 sectors per block
+#define FS_START_SECTOR 4096U            // leave space for kernel/tasks
+#define FS_SECTOR_COUNT 1048576U         // 512MiB filesystem space
+#define FS_BLOCK_SIZE   4096U            // 8 sectors per block
 #define FS_INODE_COUNT  1024U
 #define FS_MAX_PATH     256
 #define FS_NDIRECT      12
 #define FS_INDIRECT_ENTRIES (FS_BLOCK_SIZE / sizeof(uint32_t))
+#define FS_MAX_BMAP_BLOCKS 8             // supports up to ~2Mi blocks (8 * 4096 * 8 bits)
 
 // Cached metadata
 static superblock_t sb;
@@ -25,10 +26,34 @@ static uint32_t imap_blocks;
 static uint32_t bmap_blocks;
 static uint32_t inode_table_blocks;
 static uint8_t imap_cache[FS_BLOCK_SIZE];
-static uint8_t bmap_cache[FS_BLOCK_SIZE];
+static uint8_t bmap_cache[FS_MAX_BMAP_BLOCKS * FS_BLOCK_SIZE];
 static uint8_t block_cache[FS_BLOCK_SIZE];
+static uint8_t block_cache2[FS_BLOCK_SIZE];
+static uint8_t zero_block[FS_BLOCK_SIZE];
 
 extern uint32_t last_nonempty_sector;
+
+// ----------------------------------------------------------
+// File descriptor helpers
+// ----------------------------------------------------------
+static int alloc_fd(void)
+{
+    for (int i = 0; i < NUM_FDESCS; i++) {
+        if (!fdesc_array[i].used) {
+            fdesc_array[i].used = 1;
+            fdesc_array[i].offset = 0;
+            fdesc_array[i].ino = 0;
+            fdesc_array[i].mode = 0;
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int validate_fd(int fd)
+{
+    return fd >= 0 && fd < NUM_FDESCS && fdesc_array[fd].used;
+}
 
 // ----------------------------------------------------------
 // Helpers: bitmaps, block IO, inode read/write
@@ -103,13 +128,18 @@ static int load_superblock(void)
                   (sb.block_size * 8);
     inode_table_blocks = sb.data_offset - sb.inode_offset;
 
-    if (imap_blocks > 1 || bmap_blocks > 1 || sb.block_size != FS_BLOCK_SIZE) {
-        // Our simple cache only supports single-block maps; reject malformed fs
+    if (sb.block_size != FS_BLOCK_SIZE || imap_blocks == 0 || bmap_blocks == 0 ||
+        bmap_blocks > FS_MAX_BMAP_BLOCKS) {
+        return -1;
+    }
+    if (imap_blocks > 1) {
         return -1;
     }
 
     disk_read_block(sb.imap_offset, imap_cache);
-    disk_read_block(sb.bmap_offset, bmap_cache);
+    for (uint32_t i = 0; i < bmap_blocks; i++) {
+        disk_read_block(sb.bmap_offset + i, bmap_cache + i * FS_BLOCK_SIZE);
+    }
     fs_mounted = 1;
     cwd_ino = sb.root_ino;
     strcpy(cwd_path, "/");
@@ -197,16 +227,18 @@ static int get_data_block(inode_t *inode, uint32_t lbn, int create, uint32_t *bl
         if (inode->indirect1 == 0) {
             if (!create) return -1;
             if (alloc_block(&inode->indirect1) != 0) return -1;
-            memset(block_cache, 0, FS_BLOCK_SIZE);
-            disk_write_block(inode->indirect1, block_cache);
+            disk_write_block(inode->indirect1, zero_block);
         }
         disk_read_block(inode->indirect1, block_cache);
         uint32_t *table = (uint32_t *)block_cache;
         if (table[lbn] == 0 && create) {
-            if (alloc_block(&table[lbn]) != 0) return -1;
+            uint32_t new_blk;
+            if (alloc_block(&new_blk) != 0) return -1;
+            disk_read_block(inode->indirect1, block_cache);
+            table = (uint32_t *)block_cache;
+            table[lbn] = new_blk;
             disk_write_block(inode->indirect1, block_cache);
-            memset(block_cache, 0, FS_BLOCK_SIZE);
-            disk_write_block(table[lbn], block_cache);
+            disk_write_block(new_blk, zero_block);
         }
         blk = table[lbn];
         *blk_out = blk;
@@ -222,8 +254,7 @@ static int get_data_block(inode_t *inode, uint32_t lbn, int create, uint32_t *bl
         if (inode->indirect2 == 0) {
             if (!create) return -1;
             if (alloc_block(&inode->indirect2) != 0) return -1;
-            memset(block_cache, 0, FS_BLOCK_SIZE);
-            disk_write_block(inode->indirect2, block_cache);
+            disk_write_block(inode->indirect2, zero_block);
         }
 
         // Level 2 table
@@ -233,20 +264,24 @@ static int get_data_block(inode_t *inode, uint32_t lbn, int create, uint32_t *bl
             if (!create) return -1;
             uint32_t mid;
             if (alloc_block(&mid) != 0) return -1;
+            disk_read_block(inode->indirect2, block_cache);
+            lvl2 = (uint32_t *)block_cache;
             lvl2[idx1] = mid;
             disk_write_block(inode->indirect2, block_cache);
-            memset(block_cache, 0, FS_BLOCK_SIZE);
-            disk_write_block(mid, block_cache);
+            disk_write_block(mid, zero_block);
         }
 
         uint32_t mid_blk = lvl2[idx1];
-        disk_read_block(mid_blk, block_cache);
-        uint32_t *lvl1 = (uint32_t *)block_cache;
+        disk_read_block(mid_blk, block_cache2);
+        uint32_t *lvl1 = (uint32_t *)block_cache2;
         if (lvl1[idx0] == 0 && create) {
-            if (alloc_block(&lvl1[idx0]) != 0) return -1;
-            disk_write_block(mid_blk, block_cache);
-            memset(block_cache, 0, FS_BLOCK_SIZE);
-            disk_write_block(lvl1[idx0], block_cache);
+            uint32_t data_blk;
+            if (alloc_block(&data_blk) != 0) return -1;
+            disk_read_block(mid_blk, block_cache2);
+            lvl1 = (uint32_t *)block_cache2;
+            lvl1[idx0] = data_blk;
+            disk_write_block(mid_blk, block_cache2);
+            disk_write_block(data_blk, zero_block);
         }
 
         blk = lvl1[idx0];
@@ -268,8 +303,7 @@ static int get_data_block(inode_t *inode, uint32_t lbn, int create, uint32_t *bl
     if (inode->indirect3 == 0) {
         if (!create) return -1;
         if (alloc_block(&inode->indirect3) != 0) return -1;
-        memset(block_cache, 0, FS_BLOCK_SIZE);
-        disk_write_block(inode->indirect3, block_cache);
+        disk_write_block(inode->indirect3, zero_block);
     }
 
     disk_read_block(inode->indirect3, block_cache);
@@ -278,33 +312,38 @@ static int get_data_block(inode_t *inode, uint32_t lbn, int create, uint32_t *bl
         if (!create) return -1;
         uint32_t mid2;
         if (alloc_block(&mid2) != 0) return -1;
+        disk_read_block(inode->indirect3, block_cache);
+        lvl3 = (uint32_t *)block_cache;
         lvl3[idx2] = mid2;
         disk_write_block(inode->indirect3, block_cache);
-        memset(block_cache, 0, FS_BLOCK_SIZE);
-        disk_write_block(mid2, block_cache);
+        disk_write_block(mid2, zero_block);
     }
 
     uint32_t mid2_blk = lvl3[idx2];
-    disk_read_block(mid2_blk, block_cache);
-    uint32_t *lvl2 = (uint32_t *)block_cache;
+    disk_read_block(mid2_blk, block_cache2);
+    uint32_t *lvl2 = (uint32_t *)block_cache2;
     if (lvl2[idx1] == 0) {
         if (!create) return -1;
         uint32_t mid1;
         if (alloc_block(&mid1) != 0) return -1;
+        disk_read_block(mid2_blk, block_cache2);
+        lvl2 = (uint32_t *)block_cache2;
         lvl2[idx1] = mid1;
-        disk_write_block(mid2_blk, block_cache);
-        memset(block_cache, 0, FS_BLOCK_SIZE);
-        disk_write_block(mid1, block_cache);
+        disk_write_block(mid2_blk, block_cache2);
+        disk_write_block(mid1, zero_block);
     }
 
     uint32_t mid1_blk = lvl2[idx1];
     disk_read_block(mid1_blk, block_cache);
     uint32_t *lvl1 = (uint32_t *)block_cache;
     if (lvl1[idx0] == 0 && create) {
-        if (alloc_block(&lvl1[idx0]) != 0) return -1;
+        uint32_t data_blk;
+        if (alloc_block(&data_blk) != 0) return -1;
+        disk_read_block(mid1_blk, block_cache);
+        lvl1 = (uint32_t *)block_cache;
+        lvl1[idx0] = data_blk;
         disk_write_block(mid1_blk, block_cache);
-        memset(block_cache, 0, FS_BLOCK_SIZE);
-        disk_write_block(lvl1[idx0], block_cache);
+        disk_write_block(data_blk, zero_block);
     }
 
     blk = lvl1[idx0];
@@ -343,8 +382,8 @@ static void free_data_blocks(inode_t *inode)
         for (uint32_t i = 0; i < FS_INDIRECT_ENTRIES; i++) {
             if (lvl2[i]) {
                 uint32_t mid = lvl2[i];
-                disk_read_block(mid, block_cache);
-                uint32_t *lvl1 = (uint32_t *)block_cache;
+                disk_read_block(mid, block_cache2);
+                uint32_t *lvl1 = (uint32_t *)block_cache2;
                 for (uint32_t j = 0; j < FS_INDIRECT_ENTRIES; j++) {
                     if (lvl1[j]) {
                         free_block(lvl1[j]);
@@ -366,8 +405,8 @@ static void free_data_blocks(inode_t *inode)
         for (uint32_t i = 0; i < FS_INDIRECT_ENTRIES; i++) {
             if (lvl3[i]) {
                 uint32_t mid2 = lvl3[i];
-                disk_read_block(mid2, block_cache);
-                uint32_t *lvl2 = (uint32_t *)block_cache;
+                disk_read_block(mid2, block_cache2);
+                uint32_t *lvl2 = (uint32_t *)block_cache2;
                 for (uint32_t j = 0; j < FS_INDIRECT_ENTRIES; j++) {
                     if (lvl2[j]) {
                         uint32_t mid1 = lvl2[j];
@@ -402,8 +441,7 @@ static int alloc_block(uint32_t *blk)
             *blk = i;
             flush_bmap();
             flush_superblock();
-            memset(block_cache, 0, FS_BLOCK_SIZE);
-            disk_write_block(i, block_cache);
+            disk_write_block(i, zero_block);
             return 0;
         }
     }
@@ -681,10 +719,13 @@ int do_mkfs(void)
     uint32_t total_blocks = sb.sector_count * SECTOR_SIZE / sb.block_size;
     sb.block_count = total_blocks - sb.data_offset;
 
-    assert(imap_blocks == 1 && bmap_blocks == 1); // single-block bitmaps for simplicity
+    if (imap_blocks != 1 || bmap_blocks == 0 || bmap_blocks > FS_MAX_BMAP_BLOCKS) {
+        printk("[FS] mkfs: unsupported bitmap sizing\n");
+        return -1;
+    }
 
-    memset(imap_cache, 0, FS_BLOCK_SIZE);
-    memset(bmap_cache, 0, FS_BLOCK_SIZE);
+    memset(imap_cache, 0, imap_blocks * FS_BLOCK_SIZE);
+    memset(bmap_cache, 0, bmap_blocks * FS_BLOCK_SIZE);
 
     // Reserve metadata blocks
     for (uint32_t i = 0; i < sb.data_offset; i++) {
@@ -921,7 +962,6 @@ int do_rmdir(char *path)
 
 int do_ls(char *path, int option)
 {
-    (void)option; // basic ls; option reserved for -l
     ensure_mounted();
     if (!fs_mounted) {
         return -1;
@@ -951,10 +991,26 @@ int do_ls(char *path, int option)
         disk_read_block(phys, block_cache);
         dentry_t *ent = (dentry_t *)(block_cache + off * sizeof(dentry_t));
         if (ent->valid) {
-            printk("%s%s ", ent->name, ent->type == FS_TYPE_DIR ? "/" : "");
+            if (option == 1) {
+                char name_copy[FS_MAX_NAME_LEN];
+                strncpy(name_copy, ent->name, FS_MAX_NAME_LEN - 1);
+                name_copy[FS_MAX_NAME_LEN - 1] = '\0';
+                uint8_t type = ent->type;
+                uint32_t ino = ent->ino;
+
+                inode_t child;
+                read_inode(ino, &child);
+                printk("inode num: %u  link count: %u  size: %uB  %s%s\n",
+                       ino, child.links, child.size,
+                       name_copy, type == FS_TYPE_DIR ? "/" : "");
+            } else {
+                printk("%s%s   ", ent->name, ent->type == FS_TYPE_DIR ? "/" : "");
+            }
         }
     }
-    printk("\n");
+    if (option != 1) {
+        printk("\n");
+    }
     return 0;
 }
 
@@ -963,57 +1019,290 @@ int do_ls(char *path, int option)
 // ----------------------------------------------------------
 int do_open(char *path, int mode)
 {
-    (void)path;
-    (void)mode;
-    printk("[FS] open not implemented yet\n");
-    return 0;  // return the id of file descriptor
+    ensure_mounted();
+    if (!fs_mounted || !path || !path[0]) {
+        return -1;
+    }
+
+    char leaf[FS_MAX_NAME_LEN];
+    uint32_t parent;
+    if (resolve_parent(path, &parent, leaf) != 0 || leaf[0] == '\0') {
+        printk("[FS] open: invalid path\n");
+        return -1;
+    }
+    if (strlen(leaf) >= FS_MAX_NAME_LEN) {
+        printk("[FS] open: name too long\n");
+        return -1;
+    }
+
+    dentry_t ent;
+    int exists = (dir_lookup(parent, leaf, &ent, NULL, NULL) == 0);
+    uint32_t ino;
+
+    if (exists) {
+        if (ent.type != FS_TYPE_FILE) {
+            printk("[FS] open: not a file\n");
+            return -1;
+        }
+        ino = ent.ino;
+    } else {
+        // Create new file
+        if (mode == O_RDONLY) {
+            printk("[FS] open: file not found\n");
+            return -1;
+        }
+        if (alloc_inode(&ino) != 0) {
+            printk("[FS] open: no inode\n");
+            return -1;
+        }
+        inode_t node;
+        memset(&node, 0, sizeof(node));
+        node.ino = ino;
+        node.type = FS_TYPE_FILE;
+        node.links = 1;
+        node.size = 0;
+        write_inode(ino, &node);
+
+        if (dir_add_entry(parent, leaf, ino, FS_TYPE_FILE) != 0) {
+            free_inode(ino);
+            printk("[FS] open: dentry add failed\n");
+            return -1;
+        }
+    }
+
+    int fd = alloc_fd();
+    if (fd < 0) {
+        printk("[FS] open: fd table full\n");
+        return -1;
+    }
+    fdesc_array[fd].ino = ino;
+    fdesc_array[fd].mode = mode;
+    fdesc_array[fd].offset = 0;
+    return fd;
 }
 
 int do_read(int fd, char *buff, int length)
 {
-    (void)fd;
-    (void)buff;
-    (void)length;
-    printk("[FS] read not implemented yet\n");
-    return 0;  // return the length of trully read data
+    ensure_mounted();
+    if (!fs_mounted || !validate_fd(fd) || !buff || length < 0) {
+        return -1;
+    }
+    fdesc_t *f = &fdesc_array[fd];
+    if (f->mode == O_WRONLY) {
+        return -1;
+    }
+
+    inode_t node;
+    read_inode(f->ino, &node);
+    if (node.type != FS_TYPE_FILE) {
+        return -1;
+    }
+
+    uint32_t pos = f->offset;
+    uint32_t remaining = (node.size > pos && length > 0) ? (node.size - pos) : 0;
+    if ((uint32_t)length < remaining) remaining = length;
+
+    int read_total = 0;
+    while (remaining > 0) {
+        uint32_t blk_idx = pos / sb.block_size;
+        uint32_t blk_off = pos % sb.block_size;
+        uint32_t phys;
+        int rc = get_data_block(&node, blk_idx, 0, &phys);
+        uint32_t chunk = sb.block_size - blk_off;
+        if (chunk > remaining) chunk = remaining;
+
+        if (rc != 0 || phys == 0) {
+            memset(buff + read_total, 0, chunk);
+        } else {
+            disk_read_block(phys, block_cache2);
+            memcpy(buff + read_total, block_cache2 + blk_off, chunk);
+        }
+        pos += chunk;
+        read_total += (int)chunk;
+        remaining -= chunk;
+    }
+
+    f->offset = pos;
+    return read_total;
 }
 
 int do_write(int fd, char *buff, int length)
 {
-    (void)fd;
-    (void)buff;
-    (void)length;
-    printk("[FS] write not implemented yet\n");
-    return 0;  // return the length of trully written data
+    ensure_mounted();
+    if (!fs_mounted || !validate_fd(fd) || !buff || length < 0) {
+        return -1;
+    }
+    fdesc_t *f = &fdesc_array[fd];
+    if (f->mode == O_RDONLY) {
+        return -1;
+    }
+
+    inode_t node;
+    read_inode(f->ino, &node);
+    if (node.type != FS_TYPE_FILE) {
+        return -1;
+    }
+
+    uint32_t pos = f->offset;
+    int written = 0;
+    while (written < length) {
+        uint32_t blk_idx = pos / sb.block_size;
+        uint32_t blk_off = pos % sb.block_size;
+        uint32_t phys;
+        if (get_data_block(&node, blk_idx, 1, &phys) != 0 || phys == 0) {
+            break;
+        }
+        disk_read_block(phys, block_cache2);
+        uint32_t chunk = sb.block_size - blk_off;
+        int remain = length - written;
+        if (chunk > (uint32_t)remain) chunk = (uint32_t)remain;
+        memcpy(block_cache2 + blk_off, buff + written, chunk);
+        disk_write_block(phys, block_cache2);
+
+        pos += chunk;
+        written += (int)chunk;
+    }
+
+    if (pos > node.size) {
+        node.size = pos;
+        write_inode(node.ino, &node);
+    } else {
+        write_inode(node.ino, &node);
+    }
+    f->offset = pos;
+    return written;
 }
 
 int do_close(int fd)
 {
-    (void)fd;
-    printk("[FS] close not implemented yet\n");
-    return 0;  // do_close succeeds
+    if (!validate_fd(fd)) {
+        return -1;
+    }
+    fdesc_array[fd].used = 0;
+    return 0;
 }
 
 int do_ln(char *src_path, char *dst_path)
 {
-    (void)src_path;
-    (void)dst_path;
-    printk("[FS] ln not implemented yet\n");
-    return 0;  // do_ln succeeds 
+    ensure_mounted();
+    if (!fs_mounted || !src_path || !dst_path) {
+        return -1;
+    }
+
+    uint32_t src_ino;
+    if (resolve_path(src_path, &src_ino) != 0) {
+        printk("[FS] ln: source not found\n");
+        return -1;
+    }
+    inode_t src;
+    read_inode(src_ino, &src);
+    if (src.type != FS_TYPE_FILE) {
+        printk("[FS] ln: cannot link directory\n");
+        return -1;
+    }
+
+    char leaf[FS_MAX_NAME_LEN];
+    uint32_t parent;
+    if (resolve_parent(dst_path, &parent, leaf) != 0 || leaf[0] == '\0') {
+        printk("[FS] ln: invalid destination\n");
+        return -1;
+    }
+    if (strlen(leaf) >= FS_MAX_NAME_LEN) {
+        printk("[FS] ln: name too long\n");
+        return -1;
+    }
+    if (dir_lookup(parent, leaf, NULL, NULL, NULL) == 0) {
+        printk("[FS] ln: destination exists\n");
+        return -1;
+    }
+
+    if (dir_add_entry(parent, leaf, src_ino, FS_TYPE_FILE) != 0) {
+        return -1;
+    }
+    src.links++;
+    write_inode(src_ino, &src);
+    return 0;
 }
 
 int do_rm(char *path)
 {
-    (void)path;
-    printk("[FS] rm not implemented yet\n");
-    return 0;  // do_rm succeeds 
+    ensure_mounted();
+    if (!fs_mounted || !path) {
+        return -1;
+    }
+
+    char leaf[FS_MAX_NAME_LEN];
+    uint32_t parent;
+    if (resolve_parent(path, &parent, leaf) != 0 || leaf[0] == '\0') {
+        printk("[FS] rm: invalid path\n");
+        return -1;
+    }
+    if (strcmp(leaf, ".") == 0 || strcmp(leaf, "..") == 0) {
+        printk("[FS] rm: cannot remove . or ..\n");
+        return -1;
+    }
+
+    dentry_t ent;
+    uint32_t blk_idx, ent_idx;
+    if (dir_lookup(parent, leaf, &ent, &blk_idx, &ent_idx) != 0) {
+        printk("[FS] rm: not found\n");
+        return -1;
+    }
+    if (ent.type != FS_TYPE_FILE) {
+        printk("[FS] rm: not a file\n");
+        return -1;
+    }
+
+    inode_t inode;
+    read_inode(ent.ino, &inode);
+
+    inode_t dir;
+    read_inode(parent, &dir);
+    uint32_t phys;
+    if (get_data_block(&dir, blk_idx, 0, &phys) != 0 || phys == 0) {
+        return -1;
+    }
+    disk_read_block(phys, block_cache);
+    dentry_t *slot = (dentry_t *)(block_cache + ent_idx * sizeof(dentry_t));
+    slot->valid = 0;
+    disk_write_block(phys, block_cache);
+
+    if (inode.links > 0) {
+        inode.links--;
+        if (inode.links == 0) {
+            free_data_blocks(&inode);
+            free_inode(inode.ino);
+        } else {
+            write_inode(inode.ino, &inode);
+        }
+    }
+    return 0;
 }
 
 int do_lseek(int fd, int offset, int whence)
 {
-    (void)fd;
-    (void)offset;
-    (void)whence;
-    printk("[FS] lseek not implemented yet\n");
-    return 0;  // the resulting offset location from the beginning of the file
+    if (!validate_fd(fd)) {
+        return -1;
+    }
+    fdesc_t *f = &fdesc_array[fd];
+    inode_t node;
+    read_inode(f->ino, &node);
+    if (node.type != FS_TYPE_FILE) {
+        return -1;
+    }
+
+    int64_t new_off = 0;
+    if (whence == SEEK_SET) {
+        new_off = offset;
+    } else if (whence == SEEK_CUR) {
+        new_off = (int64_t)f->offset + offset;
+    } else if (whence == SEEK_END) {
+        new_off = (int64_t)node.size + offset;
+    } else {
+        return -1;
+    }
+
+    if (new_off < 0) new_off = 0;
+    f->offset = (uint32_t)new_off;
+    return (int)f->offset;
 }

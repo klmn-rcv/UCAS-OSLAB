@@ -258,6 +258,52 @@ int main(void)
                 path = argv[1];
             }
             sys_ls(path, option);
+        } else if(strcmp(argv[0], "touch") == 0) {
+            if(argc < 2) {
+                printf("touch: too few arguments\n");
+                continue;
+            }
+            int fd = sys_open(argv[1], O_RDWR);
+            if(fd >= 0) {
+                sys_close(fd);
+            } else {
+                printf("touch: failed\n");
+            }
+        } else if(strcmp(argv[0], "cat") == 0) {
+            if(argc < 2) {
+                printf("cat: too few arguments\n");
+                continue;
+            }
+            int fd = sys_open(argv[1], O_RDONLY);
+            if(fd < 0) {
+                printf("cat: cannot open %s\n", argv[1]);
+                continue;
+            }
+            char rbuf[256];
+            int n;
+            while((n = sys_fread(fd, rbuf, sizeof(rbuf))) > 0) {
+                for(int i = 0; i < n; i++) {
+                    printf("%c", rbuf[i]);
+                }
+            }
+            sys_close(fd);
+        } else if(strcmp(argv[0], "ln") == 0) {
+            if(argc < 3) {
+                printf("ln: usage ln <src> <dst>\n");
+                continue;
+            }
+            int ret = sys_ln(argv[1], argv[2]);
+            if(ret < 0) {
+                printf("ln: failed\n");
+            }
+        } else if(strcmp(argv[0], "rm") == 0) {
+            if(argc < 2) {
+                printf("rm: too few arguments\n");
+                continue;
+            }
+            if(sys_rm(argv[1]) < 0) {
+                printf("rm: failed\n");
+            }
         } else {
             printf("%s: command not found\n", argv[0]);
         }
